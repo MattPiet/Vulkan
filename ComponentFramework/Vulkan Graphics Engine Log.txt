@@ -1,0 +1,7 @@
+[INFO]: Starting the GameSceneManager
+[INFO]: Created Scene0: 
+[INFO]: Loading assets for Actor: 
+[INFO]: Loading assets for Actor: 
+[INFO]: Deleting assets for Actor: 
+[INFO]: Deleting assets for Actor: 
+[INFO]: Deleting the GameSceneManager
