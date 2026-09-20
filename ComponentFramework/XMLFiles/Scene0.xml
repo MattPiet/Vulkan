@@ -10,7 +10,7 @@
 	  <Material name="MarioMaterial" filename="./textures/mario_fire.png"/>
 	  <Material name="MarioMimeMaterial" filename="./textures/mario_mime.png"/>
 	  <!--Setting up shader-->
-	  <Shader name="Shader" vertFilename="shaders/multiPhong.vert.spv" fragFilename="shaders/multiPhong.frag.spv"/>
+      <Shader name="Shader" vertFilename="shaders/multiPhong.vert.spv" fragFilename="shaders/multiPhong.frag.spv"/>
 	  
 	  <!--Now that we have meshes, materials, and a shader we can set up actors-->
 

@@ -3,6 +3,7 @@
 #include "core/Debug.h"
 #include "scenes/Scene0.h"
 #include <MMath.h>
+#include <__msvc_ranges_to.hpp>
 
 #include "physics/TransformComponent.h"
 #include "render/VulkanRenderer.h"
@@ -33,7 +34,9 @@ bool Scene0::OnCreate() {
 				"MarioMime"
 			};
 			
-		
+		camera_actor_ = std::make_unique<CameraActor>(std::weak_ptr<Component>(), 45.0f, 16.0f / 9.0f, 0.5f, 400.0f);
+			camera_actor_->AddComponent(Ref<TransformComponent>() = std::make_shared<TransformComponent>(std::weak_ptr<Component>()));
+			camera_actor_->SetView(Quaternion(), Vec3(0.0f,0.0f,5.0f));
 		
 			VkPhysicalDeviceProperties deviceProperties;
 			vkGetPhysicalDeviceProperties(vRenderer->getPhysicalDevice(), &deviceProperties);
@@ -52,6 +55,9 @@ bool Scene0::OnCreate() {
 		camera.projectionMatrix = MMath::perspective(45.0f, aspectRatio, 0.5f, 100.0f);
 		camera.projectionMatrix[5] *= -1.0f;
 		camera.viewMatrix = MMath::translate(0.0f, 0.0f, -5.0f);
+
+			camera.projectionMatrix = camera_actor_->GetProjectionMatrix();
+			camera.viewMatrix = camera_actor_->GetViewMatrix();
 		
 			// 0
 		lights.diffuse[0] = Vec4(0.0, 0.0, 0.9, 0.0);
@@ -110,6 +116,9 @@ bool Scene0::OnCreate() {
 					
 						*actor->GetComponent<Sampler2D>() =  vRenderer->Create2DTextureImage(actor->GetComponent<Sampler2D>()->filename.c_str());
 						*actor->GetComponent<IndexedVertexBuffer>() = vRenderer->LoadModelIndexed(actor->GetComponent<IndexedVertexBuffer>()->filename.c_str());
+						
+						std::string vertName = actor->GetComponent<DescriptorSetInfo>()->VertFilename;
+						std::string fragName = actor->GetComponent<DescriptorSetInfo>()->FragFilename;
 						{
 							DescriptorSetBuilder descriptorSetBuilder(vRenderer->getDevice());
 							descriptorSetBuilder.add(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1, cameraUBO);
@@ -121,7 +130,7 @@ bool Scene0::OnCreate() {
 							*actor->GetComponent<DescriptorSetInfo>() = descriptorSetBuilder.BuildDescriptorSet(vRenderer->getNumSwapchains());
 						}
 					pipelineInfo = vRenderer->CreateGraphicsPipeline(actor->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,
-						"shaders/multiPhong.vert.spv", "shaders/multiPhong.frag.spv");
+						vertName.c_str(), fragName.c_str());
 				}
 			}
 		
@@ -137,8 +146,9 @@ bool Scene0::OnCreate() {
 }
 
 void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
-	
+	camera_actor_->SetQuat(sdlEvent);
 		switch (sdlEvent.type) {
+			
 		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
 			printf("size changed %d %d\n", sdlEvent.window.data1, sdlEvent.window.data2);
 			float aspectRatio = static_cast<float>(sdlEvent.window.data1) / static_cast<float>(sdlEvent.window.data2);
@@ -151,6 +161,19 @@ void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
 	
 }
 void Scene0::Update(const float deltaTime) {
+	// Apply the Vulkan Y-flip if using Vulkan
+	if (renderer->getRendererType() == RendererType::VULKAN)
+	{
+	
+		VulkanRenderer* vRenderer;
+		vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+	
+		camera_actor_->CameraMovement(deltaTime, nullptr);
+		camera.projectionMatrix = camera_actor_->GetProjectionMatrix();
+		camera.projectionMatrix[5] *= -1.0f;
+		camera.viewMatrix = camera_actor_->GetViewMatrix();
+		vRenderer->UpdateUniformBuffer<CameraData>(camera, cameraUBO);
+	}
 	static float elapsedTime = 0.0f;
 	elapsedTime += deltaTime;
 	ActorList.at("MarioFire")->GetComponent<TransformComponent>()->SetOrientation(QMath::angleAxisRotation(elapsedTime * 90.0f, Vec3(0.0f, 1.0f, 0.0f))) ;

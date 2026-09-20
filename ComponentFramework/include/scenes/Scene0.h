@@ -8,6 +8,8 @@
 #include <core/Actor.h>
 #include <unordered_map>
 #include <Assets/XMLAssetManager.h>
+
+#include "core/CameraActor.h"
 using namespace MATH;
 
 /// Forward declarations 
@@ -41,6 +43,8 @@ private:
 	
 	Ref<Actor> Mario;
 	Ref<Actor> Mario_Mime;
+
+	std::unique_ptr<CameraActor> camera_actor_;
 	
 	std::unordered_map<std::string, Ref<Actor>> ActorList;
 	Ref<XMLAssetManager> assetManager;

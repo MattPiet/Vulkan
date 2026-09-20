@@ -209,6 +209,7 @@
       <SDLCheck>true</SDLCheck>
       <LinkCompiled>true</LinkCompiled>
     </ClCompile>
+    <ClCompile Include="source\core\CameraActor.cpp" />
     <ClCompile Include="source\core\Debug.cpp">
       <RuntimeLibrary>MultiThreadedDebugDll</RuntimeLibrary>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -361,6 +362,7 @@
       <SDLCheck>true</SDLCheck>
       <LinkCompiled>true</LinkCompiled>
     </ClCompile>
+    <ClCompile Include="source\core\Trackball.cpp" />
     <ClCompile Include="source\physics\TransformComponent.cpp" />
     <ClCompile Include="source\render\DescriptorSetBuilder.cpp">
       <RuntimeLibrary>MultiThreadedDebugDll</RuntimeLibrary>
@@ -1129,11 +1131,13 @@
     <ClInclude Include="include\Assets\XMLAssetManager.h" />
     <ClInclude Include="include\core\Actor.h" />
     <ClInclude Include="include\core\Camera.h" />
+    <ClInclude Include="include\core\CameraActor.h" />
     <ClInclude Include="include\core\Component.h" />
     <ClInclude Include="include\core\CoreStructs.h" />
     <ClInclude Include="include\core\Debug.h" />
     <ClInclude Include="include\core\Timer.h" />
     <ClInclude Include="include\core\tiny_obj_loader.h" />
+    <ClInclude Include="include\core\Trackball.h" />
     <ClInclude Include="include\physics\TransformComponent.h" />
     <ClInclude Include="include\render\DescriptorSetBuilder.h" />
     <ClInclude Include="include\render\OpenGLRenderer.h" />
