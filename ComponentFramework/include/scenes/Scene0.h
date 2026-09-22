@@ -37,6 +37,8 @@ private:
 
 	DescriptorSetInfo mariosdescriptorSetInfo;
 	DescriptorSetInfo SkulldescriptorSetInfo;
+	
+	DescriptorSetInfo CameraUBOinfo;
 
 	PipelineInfo pipelineInfo;
 	CommandBufferData commandBufferData;

@@ -17,7 +17,7 @@ layout(binding = 1) uniform LightsUBO {
 
 layout (location = 0) out vec4 fragColor;
 
-layout(binding = 2) uniform sampler2D texSampler;
+layout(set = 1, binding = 2) uniform sampler2D texSampler;
 
 void main() { 
 	vec3 reflection[MAX_LIGHTS];

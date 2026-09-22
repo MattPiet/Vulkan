@@ -881,10 +881,10 @@ void VulkanRenderer::BindPipeline(VkPipeline pipeline) {
 /// Allocate a descriptor set per swapchain image.
 /// During rendering, bind the descriptor set associated with the current swapchain image.
 
-void VulkanRenderer::BindDescriptorSet(VkPipelineLayout pipelineLayout, std::vector<VkDescriptorSet> descriptorSet){
+void VulkanRenderer::BindDescriptorSet(VkPipelineLayout pipelineLayout, int firstSet, std::vector<VkDescriptorSet> descriptorSet){
     for (uint32_t i = 0; i < numSwapchains; i++) {
         vkCmdBindDescriptorSets(primaryCommandBuffer.commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipelineLayout, 0, 1, &descriptorSet[i], 0, nullptr);
+            pipelineLayout, firstSet, 1, &descriptorSet[i], 0, nullptr);
     }
 }
 

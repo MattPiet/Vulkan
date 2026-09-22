@@ -153,13 +153,17 @@ public: /// Member functions
     
 
     /// See DescriptorSetBuilder.cpp
-    void BindDescriptorSet(VkPipelineLayout pipelineLayout, const std::vector<VkDescriptorSet> descriptorSet);
+    void BindDescriptorSet(VkPipelineLayout pipelineLayout, int firstSet ,const std::vector<VkDescriptorSet> descriptorSet);
+    void BindMultipleDescriptorSets(VkPipelineLayout pipelineLayout, std::vector<std::vector<VkDescriptorSet>> descriptorSets);
     void DestroyDescriptorSet(DescriptorSetInfo& descriptorSetInfo);
     
 
     /// See VulkanPipeline.cpp
     PipelineInfo CreateGraphicsPipeline(VkDescriptorSetLayout descriptorSetLayout, const char* vertFile, const char* fragFile,
         const char* tessCtrlFile = nullptr, const char* tessEvalFile = nullptr, const char* geomFile = nullptr);
+    PipelineInfo CreateGraphicsPipeline(const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, const char* vertFile, const char* fragFile, 
+        const char* tessCtrlFile = nullptr, const char* tessEvalFile = nullptr, const char* geomFile = nullptr);
+    
     void BindPipeline(VkPipeline pipeline);
     void DestroyPipeline(PipelineInfo pipeline);
     static std::vector<char> readFile(const std::string& filename);

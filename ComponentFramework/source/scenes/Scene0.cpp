@@ -101,44 +101,55 @@ bool Scene0::OnCreate() {
 				}
 				ActorList[name] = std::dynamic_pointer_cast<Actor>(iterator->second);
 			}
-			for (const auto& pair : ActorList) {
-				Ref<Actor> actor = pair.second;
-				if (actor == nullptr ||
-					actor->GetComponent<DescriptorSetInfo>()   == nullptr ||
-					actor->GetComponent<Sampler2D>() == nullptr ||
-					actor->GetComponent<IndexedVertexBuffer>()     == nullptr)
-				{
-					Debug::Error("Actor is missing a shader, material, mesh or shape: " + pair.first, __FILE__, __LINE__);
-					everythingLoaded = false;
-				}
-				else
-				{
+		DescriptorSetBuilder descriptor_set_builder(vRenderer->getDevice());
+		descriptor_set_builder.add(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1, cameraUBO);
+		descriptor_set_builder.add(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1, lightsUBO);
+		CameraUBOinfo = descriptor_set_builder.BuildDescriptorSet(vRenderer->getNumSwapchains());
 					
-						*actor->GetComponent<Sampler2D>() =  vRenderer->Create2DTextureImage(actor->GetComponent<Sampler2D>()->filename.c_str());
-						*actor->GetComponent<IndexedVertexBuffer>() = vRenderer->LoadModelIndexed(actor->GetComponent<IndexedVertexBuffer>()->filename.c_str());
-						
-						std::string vertName = actor->GetComponent<DescriptorSetInfo>()->VertFilename;
-						std::string fragName = actor->GetComponent<DescriptorSetInfo>()->FragFilename;
-						{
-							DescriptorSetBuilder descriptorSetBuilder(vRenderer->getDevice());
-							descriptorSetBuilder.add(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1, cameraUBO);
-		
-							descriptorSetBuilder.add(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-							VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1, lightsUBO);
-
-							descriptorSetBuilder.add(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, actor->GetComponent<Sampler2D>().get());
-							*actor->GetComponent<DescriptorSetInfo>() = descriptorSetBuilder.BuildDescriptorSet(vRenderer->getNumSwapchains());
-						}
-					pipelineInfo = vRenderer->CreateGraphicsPipeline(actor->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,
-						vertName.c_str(), fragName.c_str());
-				}
+			for (const auto& pair : ActorList) {
+			    Ref<Actor> actor = pair.second;
+			    if (actor == nullptr ||
+			       actor->GetComponent<DescriptorSetInfo>()   == nullptr ||
+			       actor->GetComponent<Sampler2D>() == nullptr ||
+			       actor->GetComponent<IndexedVertexBuffer>()     == nullptr)
+			    {
+			       Debug::Error("Actor is missing a shader, material, mesh or shape: " + pair.first, __FILE__, __LINE__);
+			       everythingLoaded = false;
+			    }
+			    else
+			    {
+			          *actor->GetComponent<Sampler2D>() =  vRenderer->Create2DTextureImage(actor->GetComponent<Sampler2D>()->filename.c_str());
+			          *actor->GetComponent<IndexedVertexBuffer>() = vRenderer->LoadModelIndexed(actor->GetComponent<IndexedVertexBuffer>()->filename.c_str());
+			          
+			          std::string vertName = actor->GetComponent<DescriptorSetInfo>()->VertFilename;
+			          std::string fragName = actor->GetComponent<DescriptorSetInfo>()->FragFilename;
+			          {
+			             DescriptorSetBuilder actorDescriptorBuilder(vRenderer->getDevice());
+			             actorDescriptorBuilder.add(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, actor->GetComponent<Sampler2D>().get());
+			             *actor->GetComponent<DescriptorSetInfo>() = actorDescriptorBuilder.BuildDescriptorSet(vRenderer->getNumSwapchains());
+			          }
+			    	// create graphics pipeline for every actor, might be useful if two actors have different layouts. NOT MESHS OR TEXTURES LAYOUTS 
+			    	// which is highly unlikely
+			       /*std::vector<VkDescriptorSetLayout> pipelineLayouts = {
+			           CameraUBOinfo.descriptorSetLayout, 
+			           actor->GetComponent<DescriptorSetInfo>()->descriptorSetLayout
+			       };
+			    
+			       pipelineInfo = vRenderer->CreateGraphicsPipeline(pipelineLayouts, vertName.c_str(), fragName.c_str());*/
+			    }
 			}
+			// this makes one pipeline for everything 
+			std::vector<VkDescriptorSetLayout> pipelineLayouts = {
+				CameraUBOinfo.descriptorSetLayout, 
+				ActorList.begin()->second->GetComponent<DescriptorSetInfo>()->descriptorSetLayout
+			};
+			pipelineInfo = vRenderer->CreateGraphicsPipeline(pipelineLayouts, "shaders/multiPhong.vert.spv", "shaders/multiPhong.frag.spv");
 		
 	
-	}
+		}
 		break;
 
-	case RendererType::OPENGL:
+	case RendererType::OPENGL: 
 		break;
 	}
 
@@ -181,23 +192,35 @@ void Scene0::Update(const float deltaTime) {
 }
 
 void Scene0::Render() const {
-		switch (renderer->getRendererType()) {
-
-	case RendererType::VULKAN:
-		VulkanRenderer* vRenderer;
-		vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-		vRenderer->RecordCommandBuffers(Recording::START);
-			for (const auto& [name,actor] : ActorList)
+		switch (renderer->getRendererType())
+		{
+		case RendererType::VULKAN:
 			{
-				vRenderer->BindMesh(*actor->GetComponent<IndexedVertexBuffer>());
-				vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, actor->GetComponent<DescriptorSetInfo>()->descriptorSet);
+				VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+				vRenderer->RecordCommandBuffers(Recording::START);
+				
+				// build pipeline
 				vRenderer->BindPipeline(pipelineInfo.pipeline);
-				vRenderer->SetPushConstant(pipelineInfo, actor->GetModelMatrix());
-				vRenderer->DrawIndexed(*actor->GetComponent<IndexedVertexBuffer>());
+				
+				// bind Camera Once
+				vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 0, CameraUBOinfo.descriptorSet);
+				
+				for (const auto& [name, actor] : ActorList) {
+					
+					//bind mr mario
+					vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 1, actor->GetComponent<DescriptorSetInfo>()->descriptorSet); 
+					// set push constant
+					vRenderer->SetPushConstant(pipelineInfo, actor->GetModelMatrix());
+					//bind his mesh
+					vRenderer->BindMesh(*actor->GetComponent<IndexedVertexBuffer>());
+					// give him pants
+					vRenderer->DrawIndexed(*actor->GetComponent<IndexedVertexBuffer>());
+				}
+				// draw
+				vRenderer->RecordCommandBuffers(Recording::STOP);
+				vRenderer->Render();
+				break;
 			}
-			vRenderer->RecordCommandBuffers(Recording::STOP);
-			vRenderer->Render();
-		break;
 
 	case RendererType::OPENGL:
 		OpenGLRenderer* glRenderer;
@@ -222,11 +245,17 @@ void Scene0::OnDestroy() {
 		vkDeviceWaitIdle(vRenderer->getDevice());
 		vRenderer->DestroyCommandBuffers();
 		vRenderer->DestroyPipeline(pipelineInfo);
-		vRenderer->DestroyDescriptorSet(mariosdescriptorSetInfo);
 		vRenderer->DestroyUBO(lightsUBO);
 		vRenderer->DestroyUBO(cameraUBO);
-		
-		vRenderer->DestroySampler2D(mariosPants);
-		vRenderer->DestroyIndexedMesh(mariosMesh);
+		vRenderer->DestroyDescriptorSet(CameraUBOinfo);
+		for (const auto& [name, actor] : ActorList)
+		{
+			vRenderer->DestroyDescriptorSet(*actor->GetComponent<DescriptorSetInfo>());
+			vRenderer->DestroySampler2D(*actor->GetComponent<Sampler2D>());
+			vRenderer->DestroyIndexedMesh(*actor->GetComponent<IndexedVertexBuffer>());
+			
 		}
+		ActorList.clear();
+		assetManager.reset();
+	}
 }
