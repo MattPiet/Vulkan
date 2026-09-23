@@ -1,5 +1,5 @@
-#ifndef SCENE0_H
-#define SCENE0_H
+#ifndef SCENE1_H
+#define SCENE1_H
 #include "scenes/Scene.h"
 #include "Vector.h"
 #include "render/Renderer.h"
@@ -16,7 +16,7 @@ using namespace MATH;
 union SDL_Event;
 
 
-class Scene0 : public Scene {
+class Scene1 : public Scene {
 private:
 	
 	Renderer *renderer;
@@ -57,8 +57,8 @@ private:
 
 public:
 
-	explicit Scene0(Renderer* renderer_);
-	virtual ~Scene0();
+	explicit Scene1(Renderer* renderer_);
+	virtual ~Scene1();
 
 	virtual bool OnCreate() override;
 	virtual void OnDestroy() override;
@@ -68,4 +68,4 @@ public:
 };
 
 
-#endif // SCENE0_H
+#endif // Scene1_H

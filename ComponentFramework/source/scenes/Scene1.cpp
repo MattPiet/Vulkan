@@ -1,7 +1,7 @@
 #include <glew.h>
 #include <iostream>
 #include "core/Debug.h"
-#include "scenes/Scene0.h"
+#include "scenes/Scene1.h"
 #include <MMath.h>
 #include <__msvc_ranges_to.hpp>
 
@@ -11,15 +11,15 @@
 #include "scenes/SceneManager.h"
 
 
-Scene0::Scene0(Renderer *renderer_): 
+Scene1::Scene1(Renderer *renderer_): 
 	Scene(nullptr),renderer(renderer_) {
-	Debug::Info("Created Scene0: ", __FILE__, __LINE__);
+	Debug::Info("Created Scene1: ", __FILE__, __LINE__);
 }
 
-Scene0::~Scene0() {
+Scene1::~Scene1() {
 }
 
-bool Scene0::OnCreate() {
+bool Scene1::OnCreate() {
 	int width = 0, height = 0;
 	float aspectRatio;
 
@@ -47,7 +47,7 @@ bool Scene0::OnCreate() {
 			std::cout << "Max Push Constant Size: " << maxPushConstantSize << " bytes" << std::endl;
 			
 		
-			
+			std::lock_guard<std::mutex> lock(vulkanMutex);
 		lightsUBO = vRenderer->CreateUniformBuffers<LightsData>();
 		cameraUBO = vRenderer->CreateUniformBuffers<CameraData>();
 
@@ -63,7 +63,7 @@ bool Scene0::OnCreate() {
 			// 0
 		lights.diffuse[0] = Vec4(0.0, 0.0, 0.9, 0.0);
 		lights.specular[0] = Vec4(0.0, 0.0, 0.3, 0.0);
-		lights.ambient = Vec4(0.01, 0.01, 0.01, 0.0);
+		lights.ambient = Vec4(1.01, 1.01, 1.01, 0.0);
 		lights.numLights = 4;
 		lights.pos[0] = Vec4(-4.0f, -5.0f, -5.0f, 0.0f);
 			// 1
@@ -96,7 +96,7 @@ bool Scene0::OnCreate() {
 				// Is a name missing or has a typo?
 				if (iterator == assetManager->xmlAssets.end()) {
 					// Strings are handy to use the "+" symbol to join them up
-					Debug::Error("Actor not found in Scene0.xml: " + name, __FILE__, __LINE__);
+					Debug::Error("Actor not found in Scene1.xml: " + name, __FILE__, __LINE__);
 					everythingLoaded = false;
 					continue; // skip to the next iteration
 				}
@@ -106,7 +106,7 @@ bool Scene0::OnCreate() {
 		descriptor_set_builder.add(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1, cameraUBO);
 		descriptor_set_builder.add(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1, lightsUBO);
 		CameraUBOinfo = descriptor_set_builder.BuildDescriptorSet(vRenderer->getNumSwapchains());
-			std::lock_guard<std::mutex> lock(vulkanMutex);
+					
 			for (const auto& pair : ActorList) {
 			    Ref<Actor> actor = pair.second;
 			    if (actor == nullptr ||
@@ -146,18 +146,18 @@ bool Scene0::OnCreate() {
 			};
 			pipelineInfo = vRenderer->CreateGraphicsPipeline(pipelineLayouts, "shaders/multiPhong.vert.spv", "shaders/multiPhong.frag.spv");
 		
-			scene_number = 1;
+	
 		}
 		break;
 
 	case RendererType::OPENGL: 
 		break;
 	}
-
+	std::cout << "Scene 1 fully loaded" << std::endl;
 	return true;
 }
 
-void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
+void Scene1::HandleEvents(const SDL_Event& sdlEvent) {
 	camera_actor_->SetQuat(sdlEvent);
 		switch (sdlEvent.type) {
 			
@@ -172,8 +172,8 @@ void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
 		}
 	
 }
-void Scene0::Update(const float deltaTime) {
-	
+void Scene1::Update(const float deltaTime) {
+	// Apply the Vulkan Y-flip if using Vulkan
 	if (renderer->getRendererType() == RendererType::VULKAN)
 	{
 	
@@ -194,7 +194,7 @@ void Scene0::Update(const float deltaTime) {
 	
 	if (elapsedTime >= 5.0f && !hasLoaded)
 	{
-		scene_number = 1;
+		scene_number = 0;
 		loadStagedScene = true;
 		hasLoaded = true; // Lock it out from firing again
 	}
@@ -206,7 +206,7 @@ void Scene0::Update(const float deltaTime) {
 	}
 }
 
-void Scene0::Render() const {
+void Scene1::Render() const {
 		switch (renderer->getRendererType())
 		{
 		case RendererType::VULKAN:
@@ -252,25 +252,24 @@ void Scene0::Render() const {
 }
 
 
-void Scene0::OnDestroy() {
-VulkanRenderer* vRenderer;
-    vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-    if(vRenderer){
-       vkDeviceWaitIdle(vRenderer->getDevice());
-
-       vRenderer->DestroyPipeline(pipelineInfo);
-       vRenderer->DestroyUBO(lightsUBO);
-       vRenderer->DestroyUBO(cameraUBO);
-       vRenderer->DestroyDescriptorSet(CameraUBOinfo);
-       
-       for (const auto& [name, actor] : ActorList)
-       {
-          vRenderer->DestroyDescriptorSet(*actor->GetComponent<DescriptorSetInfo>());
-          vRenderer->DestroySampler2D(*actor->GetComponent<Sampler2D>());
-          vRenderer->DestroyIndexedMesh(*actor->GetComponent<IndexedVertexBuffer>());
-       }
-       
-       ActorList.clear();
-       assetManager.reset();
-    }
+void Scene1::OnDestroy() {
+	VulkanRenderer* vRenderer;
+	vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+	
+	if(vRenderer){
+		vkDeviceWaitIdle(vRenderer->getDevice());
+		vRenderer->DestroyPipeline(pipelineInfo);
+		vRenderer->DestroyUBO(lightsUBO);
+		vRenderer->DestroyUBO(cameraUBO);
+		vRenderer->DestroyDescriptorSet(CameraUBOinfo);
+		for (const auto& [name, actor] : ActorList)
+		{
+			vRenderer->DestroyDescriptorSet(*actor->GetComponent<DescriptorSetInfo>());
+			vRenderer->DestroySampler2D(*actor->GetComponent<Sampler2D>());
+			vRenderer->DestroyIndexedMesh(*actor->GetComponent<IndexedVertexBuffer>());
+			
+		}
+		ActorList.clear();
+		assetManager.reset();
+	}
 }

@@ -52,7 +52,7 @@ bool VulkanRenderer::OnCreate(){
 void VulkanRenderer::OnDestroy() {
     vkDeviceWaitIdle(device); /// Wait for all commands to clear
     destroySwapChain();
-
+    DestroyCommandBuffers();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -69,6 +69,7 @@ void VulkanRenderer::OnDestroy() {
     vkDestroyInstance(instance, nullptr);
     SDL_DestroyWindow(window);
     window = nullptr;
+    
 }
 
 void VulkanRenderer::RecreateSwapChain() {
@@ -103,6 +104,7 @@ void VulkanRenderer::Render() {
     if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
         vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
     }
+    // inflight means that the fence is currently working on something
     imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
     VkSubmitInfo submitInfo{};

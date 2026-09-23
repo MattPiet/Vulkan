@@ -3,6 +3,7 @@
 
 #include <string>
 #include "render/Renderer.h"
+#include <mutex>
 class SceneManager  {\
 public:
 	
@@ -27,13 +28,21 @@ private:
 
 	enum class RendererType rendererType;
 	class Scene* currentScene;
+	class Scene* stagedScene;
 	class Timer* timer;
 
 	Renderer* renderer;
 	unsigned int fps;
 	bool isRunning;
-	void BuildScene(SCENE_NUMBER scene_);
+	bool BuildScene(SCENE_NUMBER scene_, bool isInitialBoot = false);
+	
+	void SwapScene();
+	
+	bool ThreadStagedScene(int SceneNumber);
 };
 
-
+extern bool swapscene;
+extern bool loadStagedScene;
+extern int scene_number;
+extern std::mutex vulkanMutex;
 #endif // SCENEMANAGER_H

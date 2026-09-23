@@ -27,7 +27,7 @@ void VulkanRenderer::CreateCommandBuffers() {
         throw std::runtime_error("failed to allocate command buffers!");
     }
 }
-
+// command buffer is a list of instructions 
 void VulkanRenderer::RecordCommandBuffers(Recording start_stop) {
     if (start_stop == Recording::START) {
         vkDeviceWaitIdle(device); /// This is bad
