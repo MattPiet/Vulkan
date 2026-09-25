@@ -25,6 +25,8 @@ private:
 		SCENE5,
 		SCENE6
 	};
+	
+	std::atomic<bool> isSceneReady{false};
 
 	enum class RendererType rendererType;
 	class Scene* currentScene;
@@ -39,6 +41,7 @@ private:
 	void SwapScene();
 	
 	bool ThreadStagedScene(int SceneNumber);
+	
 };
 
 extern bool swapscene;

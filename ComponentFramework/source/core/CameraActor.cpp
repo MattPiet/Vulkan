@@ -34,28 +34,14 @@ void CameraActor::UpdateProjectionMatrix(const float fovy, const float aspectRat
 
 void CameraActor::UpdateViewMatrix()
 {
-	// let's hope we have transform component!
 	Ref<TransformComponent> transformComponent = GetComponent<TransformComponent>();
 	if (transformComponent == nullptr) {
-		// we have no transform component! use default view. takes 3 vectors
-		// this sets up where is the camera, what's it looking at, and what's up
-		// we are moving the universe, not a camera
-		// the eye moves the camera back towards us (positive z)
-		// but what really happens is we push the whole universe negative 5 along z
 		viewMatrix = MMath::lookAt(Vec3(0.0f, 0.0f, 5.0f), Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 1.0f, 0.0f));
-		
 	}
 	else {
 		Quaternion orientation = transformComponent->GetQuaternion();
 		Vec3 position = transformComponent->GetPosition();
-		// Ok we have the position and orientation of the camera in world space
-		// But the view matrix takes us from world space to camera space (camera at origin looking down -z)
-		// So we need to translate back to origin first, then rotate the camera back to the -z axis
-		Matrix4 T_inverse = MMath::translate(-position);
-		Matrix4 R_inverse = MMath::toMatrix4(QMath::conjugate(orientation));
-
-		viewMatrix = R_inverse * T_inverse;
-		// forget using the scale matrix above. What does that even mean for a camera?
+		position_orientation_Quat = MATHEX::DQMath::rotate(QMath::conjugate(orientation)) * MATHEX::DQMath::translate(-position);
 	}
 }
 
@@ -66,7 +52,7 @@ void CameraActor::OnDestroy()
 
 Vec3 CameraActor::freeCameraMovement(Vec3 direction)
 {
-	Matrix4 worldToCamera = this->GetViewMatrix();
+	Matrix4 worldToCamera = MMath::toMatrix4(position_orientation_Quat);
 	Matrix4 cameraToWorld = MMath::inverse(worldToCamera);
 	Vec3 rotated_forward_in_cam_space = cameraToWorld * direction;
 	return rotated_forward_in_cam_space;
@@ -122,8 +108,6 @@ void CameraActor::CameraMovement(float deltaTime, SDL_Gamepad* gamepad)
     }
 	
     if (VMath::mag(inputVelocity) > 0.0f) {
-       // Cap the magnitude at 1.0f so moving diagonally isn't faster, 
-       // but we preserve analog stick sensitivity (values < 1.0)
        if (VMath::mag(inputVelocity) > 1.0f) {
            inputVelocity = VMath::normalize(inputVelocity);
        }
@@ -131,11 +115,9 @@ void CameraActor::CameraMovement(float deltaTime, SDL_Gamepad* gamepad)
        Vec3 displacement = inputVelocity * GetCameraSpeed() * deltaTime;
        SetView(currentOrientation, freeCameraMovement(displacement));
     } else {
-       // Even if we aren't moving, we still need to apply rotation if the right stick moved!
        SetView(currentOrientation, transform->GetPosition());
     }
-
-    // Update the UBO
+	
     UpdateViewMatrix();
 }
 void CameraActor::SetView(const Quaternion& orientation_, const Vec3& position_) {
@@ -160,4 +142,5 @@ void CameraActor::SetQuat(const SDL_Event& sdlEvent)
 		trackball.HandleEvents(sdlEvent);
 		GetComponent<TransformComponent>()->SetOrientation(trackball.getQuat()); // Sync camera to trackball
 		}
+	UpdateViewMatrix();
 }

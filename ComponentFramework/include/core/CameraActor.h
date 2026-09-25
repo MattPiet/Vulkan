@@ -10,6 +10,8 @@
 #include "Actor.h"
 #include <core/Trackball.h>
 #include <Quaternion.h>
+#include <DQMath.h>
+#include <core/CoreStructs.h>
 using namespace MATH;
 class CameraActor:public Actor {
 private:
@@ -17,7 +19,10 @@ private:
 	// These are not pointers, so never delete them! They are created on the stack
 	// The automatic constructor will be the identity
 	Matrix4 projectionMatrix;
-	Matrix4 viewMatrix;	
+	Matrix4 viewMatrix;
+
+	MATHEX::DualQuat position_orientation_Quat;
+	
 	float CameraSpeed = 20.0f;
 
 	float m_Yaw = 0.0f;
@@ -25,6 +30,7 @@ private:
 	float m_Sensitivity = 60.0f;
 	float c_Sensitivity = 160.0f;
 	Trackball trackball;
+	CameraData data;
 public:
 	CameraActor(std::weak_ptr<Component> parent_, float fovy, float aspectRatio, float near, float far);
 	~CameraActor();
@@ -49,5 +55,13 @@ public:
 	void CameraMovement(float deltaTime, SDL_Gamepad* gamepad);
 	void SetView(const Quaternion& orientation_, const Vec3& position_);
 	void SetQuat(const SDL_Event &sdlEvent);
+	
+	CameraData GetCameraData()
+	{
+		data.viewMatrix = MMath::toMatrix4(position_orientation_Quat);
+		data.projectionMatrix = projectionMatrix;
+		data.projectionMatrix[5] *= -1;
+		return data;
+	}
 };
 #endif

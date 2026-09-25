@@ -30,7 +30,6 @@ private:
 	IndexedVertexBuffer SkullMesh;
 
 	std::vector<BufferMemory> cameraUBO;
-	CameraData camera;
 	std::vector<BufferMemory> lightsUBO;
 	LightsData lights;
 

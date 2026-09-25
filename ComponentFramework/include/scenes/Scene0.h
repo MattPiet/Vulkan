@@ -29,8 +29,7 @@ private:
 	Sampler2D  SkullTexture;
 	IndexedVertexBuffer SkullMesh;
 
-	std::vector<BufferMemory> cameraUBO;
-	CameraData camera;
+	std::vector<BufferMemory> cameraUBO;;
 	std::vector<BufferMemory> lightsUBO;
 	LightsData lights;
 

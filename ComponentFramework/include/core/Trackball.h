@@ -14,9 +14,9 @@ union SDL_Event;
 		MATH::Quaternion prevQuat;
 		MATH::Matrix4 invNDC;			/// the inverse of the viewportNDC matrix
 		MATH::Vec3 beginV, endV;		/// Begin and end points after being transformed by invNDC
+		
 		float m_Yaw = 0.0f;
 		float m_Pitch = 0.0f;
-		int lastMouseX, lastMouseY;
 		float m_Sensitivity = 0.1f;
 	public:
 		bool Trackingx = true;
@@ -32,8 +32,8 @@ union SDL_Event;
 		void HandleEvents(const SDL_Event &sdlEvent);
 		void SetSensitivity(float s) { m_Sensitivity = s;}
 	private:
-		void onRightMouseDown(int x, int y);
-		void onRightMouseUp(int x, int y);
+		void onRightMouseDown();
+		void onRightMouseUp();
 		void onMouseMove(int x, int y);
 	};
 

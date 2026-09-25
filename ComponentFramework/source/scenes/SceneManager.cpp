@@ -14,7 +14,7 @@ int scene_number = 0;
 std::mutex vulkanMutex;
 
 SceneManager::SceneManager(): 
-	currentScene(nullptr), timer(nullptr),
+	currentScene(nullptr), stagedScene(nullptr), timer(nullptr),
 	fps(60), isRunning(false), rendererType(RendererType::VULKAN),
 	renderer(nullptr) {}
 
@@ -76,9 +76,11 @@ bool SceneManager::Initialize(std::string name_, int width_, int height_) {
 
 
 void SceneManager::Run() {
+	SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_TIME_CRITICAL);
 	timer->Start();
 	isRunning = true;
 	while (isRunning) {
+	
 		timer->UpdateFrameTicks();
 		currentScene->Update(timer->GetDeltaTime());
 		currentScene->Render();
@@ -86,15 +88,21 @@ void SceneManager::Run() {
 		SDL_Delay(timer->GetSleepTime(fps));	
 		if (loadStagedScene)
 		{
-			std::thread th1(&SceneManager::ThreadStagedScene, this, scene_number);
-			th1.detach();
-			loadStagedScene = false;
+				std::thread th1([=]
+				{
+					bool loadedScene = ThreadStagedScene(scene_number);
+					if (loadedScene) {
+						isSceneReady = true;
+					}
+				});    
+				th1.detach();
+				loadStagedScene = false;
 		}
-		else if (swapscene)
+		if (isSceneReady)
 		{
 			SwapScene();
-		}
-		
+			isSceneReady = false;
+		}		
 	}
 }
 
@@ -227,6 +235,7 @@ void SceneManager::SwapScene()
 
 bool SceneManager::ThreadStagedScene(int scene_number)
 {
+	SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_TIME_CRITICAL);
 	switch (scene_number)
 	{
 	case 0:

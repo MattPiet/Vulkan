@@ -73,7 +73,7 @@
     <IncludePath>C:\GameDev\OpenGL\include;C:\GameDev\SDL3\include;C:\GameDev\Vulkan\include;C:\GameDev\MathLibrary\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\GameDev\Vulkan\include;C:\GameDev\OpenGL\include;C:\GameDev\SDL3\include;C:\GameDev\MathLibrary\include;$(ProjectDir)include;$(IncludePath)</IncludePath>
+    <IncludePath>C:\GameDev\Vulkan\include;C:\GameDev\OpenGL\include;C:\GameDev\SDL3\include;C:\GameDev\MathLibrary\include;$(ProjectDir)include;$(ProjectDir)Upscaling\NVIDIA\Include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -98,8 +98,8 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>C:\GameDev\OpenGL\lib\x64;C:\GameDev\SDL3\lib\x64;C:\GameDev\Vulkan\lib64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;glew32.lib;glew32s.lib;opengl32.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\GameDev\OpenGL\lib\x64;C:\GameDev\SDL3\lib\x64;C:\GameDev\Vulkan\lib64;$(ProjectDir)Upscaling\NVIDIA\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;glew32.lib;glew32s.lib;opengl32.lib;vulkan-1.lib;sl.interposer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -1201,6 +1201,7 @@
       <SDLCheck>true</SDLCheck>
       <LinkCompiled>true</LinkCompiled>
     </ClCompile>
+    <ClCompile Include="source\Upscalers\DLSS\DLSSManager.cpp" />
     <ClCompile Include="source\Vendor\tinyxml2.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -1224,6 +1225,8 @@
     <ClInclude Include="include\scenes\Scene0.h" />
     <ClInclude Include="include\scenes\Scene1.h" />
     <ClInclude Include="include\scenes\SceneManager.h" />
+    <ClInclude Include="include\Upscalers\DLSS\DLSSManager.h" />
+    <ClInclude Include="include\Upscalers\IUpscaler.h" />
     <ClInclude Include="include\Vendor\tinyxml2.h" />
   </ItemGroup>
   <ItemGroup>
@@ -1241,6 +1244,10 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="XMLFiles\Scene0.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="include\Upscalers\FSR\" />
+    <Folder Include="source\Upscalers\FSR\" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
