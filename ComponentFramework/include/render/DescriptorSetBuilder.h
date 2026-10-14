@@ -27,7 +27,7 @@ struct SingleDescriptorInfoCollection {
     uint32_t descriptorCount;
     VkDescriptorType descriptorType;
     VkSampler *pImmutableSamplers;
-    VkShaderStageFlags stageFlags; /// 
+    VkShaderStageFlags stageFlags; /// setsup which shader stage can access this descriptor.
 
     /// If it's a UBO use these 
     VkBuffer buffer;
@@ -38,7 +38,7 @@ struct SingleDescriptorInfoCollection {
     VkImageLayout imageLayout;
     VkImageView imageView;
     VkSampler sampler;
-
+    SamplerCube* pCubeMem; // <--- ADD THIS
     /// There must be a swapchain number of UBO data
     std::vector<BufferMemory> bufferMem;
 
@@ -76,6 +76,10 @@ public:
     DescriptorSetBuilder& add(uint32_t binding, VkDescriptorType descriptorType,
                 VkShaderStageFlags stageFlags, uint32_t count, Sampler2D *imageData);
     
+    /// Add SamplerCube descriptor
+    DescriptorSetBuilder& add(uint32_t binding, VkDescriptorType descriptorType,
+    VkShaderStageFlags stageFlags, uint32_t count, SamplerCube* cubeData);
+
     DescriptorSetInfo BuildDescriptorSet(uint32_t numSwapChains_);
 
     std::vector<VkDescriptorSet>& getDescriptorSet(){ return descriptorSet;}

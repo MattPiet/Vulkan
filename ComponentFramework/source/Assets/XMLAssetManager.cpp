@@ -7,6 +7,7 @@
 #include "physics/TransformComponent.h"
 #include <assert.h>
 
+#include "core/CameraActor.h"
 #include "core/CoreStructs.h"
 
 XMLAssetManager::XMLAssetManager()
@@ -27,6 +28,7 @@ XMLAssetManager::XMLAssetManager()
 	{
 		AddMaterial(child);
 		AddShader(child);
+		AddSkybox(child);
 	//	AddCamera(child);
 	//	AddLight(child);
 		
@@ -64,7 +66,39 @@ XMLAssetManager::XMLAssetManager()
 		//	AddPhysicsToActor(child, actor, parent);
 
 			// Use OnCreate for the actor (which in turn fires OnCreate for each component).
-			if (actor->OnCreate() == false) {
+			if (actor->OnCreate(nullptr) == false) {
+				Debug::Error(std::string("Actor ") + actorName + " could not load all of its assets", __FILE__, __LINE__);
+			}
+			AddComponent(child->Attribute("actorname"), actor);
+		}
+	}
+	
+	for (const tinyxml2::XMLElement* child = rootData->FirstChildElement("Scene0")->FirstChildElement("CameraActor");
+		child;
+		child = child->NextSiblingElement())
+	{
+		if (std::string(child->Name()) == "CameraActor") {
+			const char* actorName = child->Attribute("actorname");
+			const char* parentName = child->Attribute("parent");
+			std::weak_ptr<Component> parent = std::weak_ptr<Component>();
+			if (parentName != nullptr && std::string(parentName) != "none") {
+				parent = GetComponent<Actor>(parentName);
+			}
+			
+			Ref<CameraActor> actor = std::make_shared<CameraActor>(std::weak_ptr<Component>(), 45.0f, 1, 0.5f, 100.0f);
+			// Add shared assets to the actor
+			AddMeshToActor(child, actor);
+			AddShaderToActor(child, actor);
+			AddMaterialToActor(child, actor);
+			AddSkyBoxToActor(child, actor);
+			//	AddShapeToActor(child, actor);
+			// The transform is unique for the actor. Needs the parent too
+			AddTransformToActor(child, actor, parent);
+			// Add physics to the actor AFTER the transform. We need them to match in position and orientation
+			//	AddPhysicsToActor(child, actor, parent);
+
+			// Use OnCreate for the actor (which in turn fires OnCreate for each component).
+			if (actor->OnCreate(nullptr) == false) {
 				Debug::Error(std::string("Actor ") + actorName + " could not load all of its assets", __FILE__, __LINE__);
 			}
 			AddComponent(child->Attribute("actorname"), actor);
@@ -95,6 +129,27 @@ void XMLAssetManager::AddMaterial(const tinyxml2::XMLElement* child)
 	}
 }
 
+void XMLAssetManager::AddSkybox(const tinyxml2::XMLElement* child)
+{
+	if (std::string(child->Name()) == "SkyboxMaterial") {
+		const char* name = child->Attribute("name");
+		const char* posx = child->Attribute("posx");
+		const char* negx = child->Attribute("negx");
+		const char* posy = child->Attribute("posy");
+		const char* negy = child->Attribute("negy");
+		const char* posz = child->Attribute("posz");
+		const char* negz = child->Attribute("negz");
+
+		AddComponent<SamplerCube>(name, std::shared_ptr<SamplerCube>() = std::make_shared<SamplerCube>());
+		GetComponent<SamplerCube>(name)->filenames[0] = posx;
+		GetComponent<SamplerCube>(name)->filenames[1] = negx;
+		GetComponent<SamplerCube>(name)->filenames[2] = posy;
+		GetComponent<SamplerCube>(name)->filenames[3] = negy;
+		GetComponent<SamplerCube>(name)->filenames[4] = posz;
+		GetComponent<SamplerCube>(name)->filenames[5] = negz;
+	}
+}
+
 void XMLAssetManager::AddShader(const tinyxml2::XMLElement* child)
 {
 	if (std::string(child->Name()) == "Shader") {
@@ -104,6 +159,15 @@ void XMLAssetManager::AddShader(const tinyxml2::XMLElement* child)
 		AddComponent<DescriptorSetInfo>(name ,std::shared_ptr<DescriptorSetInfo>() = std::make_shared<DescriptorSetInfo>());
 		GetComponent<DescriptorSetInfo>(name)->VertFilename = vertFilename;
 		GetComponent<DescriptorSetInfo>(name)->FragFilename = fragFilename;
+	}
+}
+
+void XMLAssetManager::AddSkyBoxToActor(const tinyxml2::XMLElement* child, Ref<Actor> actor)
+{
+	if (child->FirstChildElement("SkyboxMaterial")) {
+		const char* name = child->FirstChildElement("SkyboxMaterial")->Attribute("name");
+		Ref<SamplerCube> skybox = GetComponent<SamplerCube>(name);
+		actor->AddComponent<SamplerCube>(skybox);		
 	}
 }
 

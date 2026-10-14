@@ -7,7 +7,7 @@ layout (location = 2) in vec2 fragTexCoords;
 layout (location = 3) in vec3 lightDir[MAX_LIGHTS];
 
 
-layout(binding = 1) uniform LightsUBO {
+layout(set = 1, binding = 0) uniform LightsUBO {
  vec4 pos[MAX_LIGHTS];
  vec4 diffuse[MAX_LIGHTS];
  vec4 specular[MAX_LIGHTS];
@@ -17,7 +17,7 @@ layout(binding = 1) uniform LightsUBO {
 
 layout (location = 0) out vec4 fragColor;
 
-layout(set = 1, binding = 2) uniform sampler2D texSampler;
+layout(set = 2, binding = 2) uniform sampler2D texSampler;
 
 void main() { 
 	vec3 reflection[MAX_LIGHTS];

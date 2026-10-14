@@ -19,7 +19,7 @@ TransformComponent::~TransformComponent()
 {
 }
 
-bool TransformComponent::OnCreate()
+bool TransformComponent::OnCreate(VulkanRenderer* vRenderer)
 {
 	return true;
 }

@@ -6,11 +6,22 @@
 	  </Mesh>
 	  <Mesh name="MarioMimeMesh" filename="meshes/Mario.obj">
 	  </Mesh>
+	  <Mesh name="CubeMesh" filename="meshes/Cube.obj">
+	  </Mesh>
 	  <!--Setting up materials-->
 	  <Material name="MarioMaterial" filename="./textures/mario_fire.png"/>
 	  <Material name="MarioMimeMaterial" filename="./textures/mario_mime.png"/>
+	  <SkyboxMaterial name="SkyboxMaterial"
+	                  posx="./textures/StarSkyboxPosx.png"
+	                  negx="./textures/StarSkyboxNegx.png"
+	                  posy="./textures/StarSkyboxPosy.png"
+	                  negy="./textures/StarSkyboxNegY.png"
+	                  posz="./textures/StarSkyboxPosz.png"
+	                  negz="./textures/StarSkyboxnegz.png"/>
+	  />
 	  <!--Setting up shader-->
       <Shader name="Shader" vertFilename="shaders/multiPhong.vert.spv" fragFilename="shaders/multiPhong.frag.spv"/>
+	  <Shader name="SkyboxShader" vertFilename="shaders/skybox.vert.spv" fragFilename="shaders/skybox.frag.spv"/>
 	  
 	  <!--Now that we have meshes, materials, and a shader we can set up actors-->
 
@@ -32,6 +43,14 @@
 		  <Material name ="MarioMimeMaterial"/>
 	  </Actor>
 
+	  <CameraActor actorname="Camera" parent="none">
+		  <Transform posx="0.0" posy="0.0" posz="5.0"
+					 angleDeg="0.0" axisx="1.0" axisy="0.0" axisz="0.0"
+					 scalex="1.0" scaley="1.0" scalez="1.0"/>
+		  <Mesh name ="CubeMesh"/>
+		  <SkyboxMaterial name="SkyboxMaterial"/>
+		  <Shader name = "SkyboxShader"/>
+	  </CameraActor>
 	  <!-- Set up camera and light actors-->
 	  <!--
 	  <Camera cameraname="Camera1" parent="none">

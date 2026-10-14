@@ -45,14 +45,14 @@ public:
     bool Initialize(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t appId, const wchar_t* dataPath);
     void Shutdown();
 
-    bool IsDLSSSupported() const { return m_isSupported; }
+    bool IsDLSSSupported() const { return isSupported; }
     void UpdateFrameConstants(const DLSSFrameParams& params, uint32_t frameIndex);
     void TagResources(VkCommandBuffer cmdBuffer, const DLSSResourceBindings& resources);
     void EvaluateDLSS(VkCommandBuffer cmdBuffer);
 
 private:
-    VkDevice m_device = VK_NULL_HANDLE;
-    bool m_isSupported = false;
+    VkDevice device = VK_NULL_HANDLE;
+    bool isSupported = false;
     
     sl::DLSSMode GetDLSSMode(DLSSQualityMode mode) {
         switch (mode) {

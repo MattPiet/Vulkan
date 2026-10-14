@@ -26,6 +26,7 @@
 		return *this;  
     }
 
+
     DescriptorSetBuilder& DescriptorSetBuilder::add(uint32_t binding, VkDescriptorType descriptorType,
         VkShaderStageFlags stageFlags, uint32_t count, Sampler2D *imageData) {
 
@@ -47,6 +48,27 @@
         return *this;  
     }
 
+DescriptorSetBuilder& DescriptorSetBuilder::add(uint32_t binding, VkDescriptorType descriptorType,
+    VkShaderStageFlags stageFlags, uint32_t count, SamplerCube* cubeData) {
+
+        std::vector<BufferMemory> empty; 
+
+        SingleDescriptorInfoCollection singleDescriptorInfo{};
+        assert(desciptorsData.count(binding) == 0 && "That binding already in use");
+        singleDescriptorInfo.binding = binding;
+        singleDescriptorInfo.descriptorCount = count;
+        singleDescriptorInfo.descriptorType = descriptorType;
+        singleDescriptorInfo.pImmutableSamplers = nullptr;
+        singleDescriptorInfo.stageFlags = stageFlags;
+        singleDescriptorInfo.bufferMem = empty;
+        singleDescriptorInfo.pImageMem = nullptr; // Null out the 2D pointer
+        singleDescriptorInfo.pCubeMem = cubeData; // Assign the Cube pointer
+
+        singleDescriptorInfo.range = 0;
+        singleDescriptorInfo.offset = 0;
+        desciptorsData[binding] = singleDescriptorInfo; 
+        return *this;  
+    }
 
     DescriptorSetInfo DescriptorSetBuilder::BuildDescriptorSet(uint32_t numSwapChains_){
         numSwapChains = numSwapChains_;
@@ -158,8 +180,17 @@
                 }else if (b.second.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER){
                     VkDescriptorImageInfo imageInfo{};
                     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                    imageInfo.imageView = b.second.pImageMem->imageView;
-                    imageInfo.sampler = b.second.pImageMem->sampler;
+                    
+                    if (b.second.pImageMem != nullptr) {
+                        imageInfo.imageView = b.second.pImageMem->imageView;
+                        imageInfo.sampler = b.second.pImageMem->sampler;
+                    } 
+                    else if (b.second.pCubeMem != nullptr) {
+                        imageInfo.imageView = b.second.pCubeMem->imageView;
+                        imageInfo.sampler = b.second.pCubeMem->sampler;
+                    } else {
+                        throw std::runtime_error("Both image pointers are null for a Combined Image Sampler!");
+                    }
                     imageInfoList.push_back(imageInfo);
                 }
             }

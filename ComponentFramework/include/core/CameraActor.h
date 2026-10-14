@@ -11,8 +11,33 @@
 #include <core/Trackball.h>
 #include <Quaternion.h>
 #include <DQMath.h>
+#include <Plane.h>
+#include <PMath.h>
 #include <core/CoreStructs.h>
+
+#include "render/VulkanRenderer.h"
 using namespace MATH;
+
+enum class FrustumCollision {
+	INSIDE,
+	CULLED_NEAR,
+	CULLED_FAR,
+	CULLED_LEFT,
+	CULLED_RIGHT,
+	CULLED_BOTTOM,
+	CULLED_TOP
+};
+
+struct Frustum
+{
+	MATHEX::Plane left_plane;
+	MATHEX::Plane right_plane;
+	MATHEX::Plane front_plane;
+	MATHEX::Plane back_plane;
+	MATHEX::Plane top_plane;
+	MATHEX::Plane bottom_plane;
+};
+
 class CameraActor:public Actor {
 private:
 	// The camera is nothing but a projection matrix and a view matrix
@@ -31,21 +56,33 @@ private:
 	float c_Sensitivity = 160.0f;
 	Trackball trackball;
 	CameraData data;
+	
+	Frustum frustum;
+	
+	float cullRadius = 2.0f;
+	
+	std::vector<BufferMemory> cameraUBO;
+	DescriptorSetInfo CameraUBOinfo;
+	PipelineInfo skyboxPipelineInfo;
+	
 public:
 	CameraActor(std::weak_ptr<Component> parent_, float fovy, float aspectRatio, float near, float far);
 	~CameraActor();
 
 	// we will override the base class one (new in C++ 11)
 	// put override so that if you spell the method wrong it give a error
-	bool OnCreate() override;
+	bool OnCreate(VulkanRenderer* vRenderer) override;
 	void OnDestroy() override;
 
+	std::vector<BufferMemory> GetCameraUBO() const { return cameraUBO; }
+	DescriptorSetInfo GetCameraUBODescriptorSetInfo() const { return CameraUBOinfo; }
+	DescriptorSetInfo& GetCameraUBODescriptorSetInfoRef() { return CameraUBOinfo; }
+	void SetCameraUBODescriptorSetInfo(const DescriptorSetInfo& info) { CameraUBOinfo = info; }
+	PipelineInfo GetSkyboxPipelineInfo() const { return skyboxPipelineInfo; }
+	
 	Matrix4 GetProjectionMatrix() const { return projectionMatrix; }
-	Matrix4 GetViewMatrix() const { return viewMatrix; }
-
-	// fovy (field of view along y) is roughly 40 degrees
-	// need aspectRatio of window, near and far clipping planes
-	// these are the standard arguments for generating the perspective matrix in OpenGL
+	Matrix4 GetViewMatrix() const { return MMath::toMatrix4(position_orientation_Quat); }
+	
 	void UpdateProjectionMatrix(const float fovy, const float aspectRatio, const float near, const float far);
 	void UpdateViewMatrix();	
 	float GetCameraSpeed() const { return CameraSpeed; }
@@ -60,8 +97,20 @@ public:
 	{
 		data.viewMatrix = MMath::toMatrix4(position_orientation_Quat);
 		data.projectionMatrix = projectionMatrix;
-		data.projectionMatrix[5] *= -1;
 		return data;
 	}
+	
+	void CreateSkyboxPipeline(VulkanRenderer* vRenderer);
+	
+	void setFrustumCullRadius(float frustumCullRadius){cullRadius = frustumCullRadius;}
+	
+	Frustum GetFrustum() const { return frustum; } 
+	void UpdateFrustum();
+	FrustumCollision CheckFrustum(Matrix4 modelMatrix);
+	
 };
+
+
+
+
 #endif

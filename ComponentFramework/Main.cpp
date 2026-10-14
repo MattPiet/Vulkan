@@ -11,6 +11,7 @@
 
 
 #include "scenes/SceneManager.h"
+#include <core/Profiling.h>
 
 
 #include "MMath.h"
@@ -35,6 +36,8 @@ int main(int argc, char* args[]) {
 		gsm->Run();
 	} 
 	delete gsm;
+	printAllTiming();
+	clearTiming();
 	exit(0);
 
 }

@@ -52,9 +52,11 @@ struct XMLAssetManager {
 	//////////////////////////
 
 	void AddMaterial(const tinyxml2::XMLElement* child);
+	void AddSkybox(const tinyxml2::XMLElement* child);
 	void AddShader(const tinyxml2::XMLElement* child);
 	//void AddCamera(const tinyxml2::XMLElement* child);
 	//void AddLight(const tinyxml2::XMLElement* child);
+	void AddSkyBoxToActor(const tinyxml2::XMLElement* child, Ref<Actor> actor);
 	void AddMeshToActor(const tinyxml2::XMLElement* child, Ref<Actor> actor);
 	void AddShaderToActor(const tinyxml2::XMLElement* child, Ref<Actor> actor);
 	void AddMaterialToActor(const tinyxml2::XMLElement* child, Ref<Actor> actor);

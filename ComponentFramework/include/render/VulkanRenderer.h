@@ -27,6 +27,7 @@
 #include <VMath.h>
 #include <MMath.h>
 #include <Hash.h>
+#include <core/ML.h>
 using namespace MATH;
 
 
@@ -151,6 +152,12 @@ public: /// Member functions
     void createTextureSampler(Sampler2D& texture2D) const;
     void DestroySampler2D(Sampler2D& texture2D);
     
+    // SkyBox
+    void createCubeImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, 
+        VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+    VkImageView createCubeImageView(VkImage image, VkFormat format, uint32_t mipLevels);
+    SamplerCube CreateCubeMapTexture(const std::string faces[6]);
+    void DestroySamplerCube(SamplerCube& textureCube);
 
     /// See DescriptorSetBuilder.cpp
     void BindDescriptorSet(VkPipelineLayout pipelineLayout, int firstSet ,const std::vector<VkDescriptorSet> descriptorSet);
@@ -164,6 +171,9 @@ public: /// Member functions
     PipelineInfo CreateGraphicsPipeline(const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, const char* vertFile, const char* fragFile, 
         const char* tessCtrlFile = nullptr, const char* tessEvalFile = nullptr, const char* geomFile = nullptr);
     
+    // skybox
+    PipelineInfo CreateSkyboxPipeline(const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, const char* vertFile, const char* fragFile);
+    
     void BindPipeline(VkPipeline pipeline);
     void DestroyPipeline(PipelineInfo pipeline);
     static std::vector<char> readFile(const std::string& filename);
@@ -176,7 +186,9 @@ public: /// Member functions
     void DestroyIndexedMesh(IndexedVertexBuffer mesh_);
 private:
     void CreateVertexBuffer(IndexedVertexBuffer& indexedVertexBuffer, const std::vector<Vertex>& vertices);
+    void CreateVertexBuffer(IndexedVertexBuffer& indexedVertexBuffer, const ML::List<Vertex>& vertices);
     void CreateIndexBuffer(IndexedVertexBuffer& indexedVertexBuffer, const std::vector<uint32_t>& indices);
+    void CreateIndexBuffer(IndexedVertexBuffer& indexedVertexBuffer, const ML::List<uint32_t>& indices);
         /// A helper function for createVertexBuffer()
         uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
@@ -204,6 +216,8 @@ public:
         ubo.resize(numSwapchains);
         for (size_t i = 0; i < numSwapchains; i++) {
             ubo[i].bufferMemoryLength = bufferSize;
+            // The bottom two calls are for creating a uniform buffer for each swapchain image. The buffer is host visible and coherent, 
+            // meaning that the CPU can write to it directly and the GPU will see the changes without needing to flush the cache.
             CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 ubo[i].bufferID, ubo[i].bufferMemoryID);
@@ -219,7 +233,7 @@ public:
             memcpy(data, &srcData, bufferMemory[i].bufferMemoryLength);
             vkUnmapMemory(device, bufferMemory[i].bufferMemoryID);
         }
-    };
+    }
 
     void DestroyUBO(std::vector<BufferMemory> ubo);
 
@@ -291,6 +305,10 @@ private:
     void destroySwapChain();
    
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+    
+    //skybox
+    void transitionCubeImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
+    
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
     VkFormat findDepthFormat();

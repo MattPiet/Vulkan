@@ -6,7 +6,7 @@ layout (location = 0) in  vec4 vVertex;
 layout (location = 1) in  vec4 vNormal;
 layout (location = 2) in  vec2 texCoords;
 
-layout(binding = 0) uniform CameraUBO {
+layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 projectionMatrix;
 	mat4 viewMatrix;
 } camera;
@@ -17,7 +17,7 @@ layout(push_constant) uniform Push {
 	vec4 pad;
 } push;
 
-layout(binding = 1) uniform LightsUBO {
+layout(set = 1, binding = 0) uniform LightsUBO {
  vec4 pos[MAX_LIGHTS];
  vec4 diffuse[MAX_LIGHTS];
  vec4 specular[MAX_LIGHTS];
@@ -33,9 +33,7 @@ layout (location = 3) out vec3 lightDir[MAX_LIGHTS];
 
 void main() {
 	fragTexCoords = texCoords;
-	mat3 normalMatrix = mat3(transpose(inverse(push.modelMatrix)));
-
-	vertNormal = normalize(normalMatrix * vNormal.xyz); /// Rotate the normal to the correct orientation 
+	vertNormal = normalize(mat3(push.normalMatrix) * vNormal.xyz);/// Rotate the normal to the correct orientation 
 	vec3 vertPos = vec3(camera.viewMatrix * push.modelMatrix * vVertex); /// This is the position of the vertex from the origin
 	vec3 vertDir = normalize(vertPos);
 	eyeDir = -vertDir;

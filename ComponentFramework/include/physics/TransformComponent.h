@@ -16,7 +16,7 @@ public:
 	TransformComponent(std::weak_ptr<Component> parent_,Vec3 pos_, Quaternion orientation_, Vec3 scale_ = Vec3(1.0f, 1.0f, 1.0f));
 	~TransformComponent();
 
-	bool OnCreate() override;
+	bool OnCreate(VulkanRenderer* vRenderer) override;
 	void OnDestroy() override;
 	void Update(const float deltaTime_) override;
 	void Render() const override;

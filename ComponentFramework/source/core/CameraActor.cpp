@@ -8,27 +8,67 @@
 using namespace MATH;
 CameraActor::CameraActor(std::weak_ptr<Component> parent_, float fovy, float aspectRatio, float near, float far) : Actor(parent_)
 {
-	projectionMatrix = MMath::perspective(fovy, aspectRatio, near, far);
+	projectionMatrix = MMath::PerspectiveVulkan(fovy, aspectRatio, near, far);
 	viewMatrix.loadIdentity();
+	UpdateFrustum();
 }
 
 CameraActor::~CameraActor() {
 	OnDestroy();
 }
 
-bool CameraActor::OnCreate()
+bool CameraActor::OnCreate(VulkanRenderer* vRenderer)
 {
 	// This'll stop us from creating something twice and generating memory leaks
 	// This will save us sweating when the code gets even more complicated
-	if (isCreated) return true;
 
-	isCreated = true;
-	return isCreated;
+	if (vRenderer)
+	{
+		
+		if (isCreated) return true;
+		isCreated = true;
+		int width = 0, height = 0;
+		SDL_GetWindowSize(vRenderer->getWindow(), &width, &height);
+		float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
+		UpdateProjectionMatrix(45.0f, aspectRatio, 0.5f, 100.0f);
+		
+		// this sets up the skybox mesh and textures
+		*GetComponent<SamplerCube>() = vRenderer->CreateCubeMapTexture(GetComponent<SamplerCube>()->filenames);
+		*GetComponent<IndexedVertexBuffer>() = vRenderer->LoadModelIndexed(GetComponent<IndexedVertexBuffer>()->filename.c_str());
+		
+		// this is the DescriptorSetInfo for the skybox, which is a cube map texture
+		DescriptorSetBuilder skyboxDescriptorBuilder(vRenderer->getDevice());
+		skyboxDescriptorBuilder.add(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, GetComponent<SamplerCube>().get());
+		*GetComponent<DescriptorSetInfo>() = skyboxDescriptorBuilder.BuildDescriptorSet(vRenderer->getNumSwapchains());
+		
+		// This is the start of the camera info
+		cameraUBO = vRenderer->CreateUniformBuffers<CameraData>();
+		vRenderer->UpdateUniformBuffer<CameraData>(GetCameraData(), GetCameraUBO());
+       // This is the DescriptorSetInfo for the camera, which is a uniform buffer object
+		DescriptorSetBuilder descriptor_set_builder(vRenderer->getDevice());
+		// Set 0, Binding 0, Count 1
+		descriptor_set_builder.add(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1, GetCameraUBO());
+		SetCameraUBODescriptorSetInfo(descriptor_set_builder.BuildDescriptorSet(vRenderer->getNumSwapchains()));
+		
+		// The SkyBox Needs its own Pipeline for two reasons, 1 it uses its own shader and two is needs to use a Cube Sampler
+		// Also the depth and stencil testing needs to be different for the skybox, so it needs its own pipeline
+		CreateSkyboxPipeline(vRenderer);
+	}
+	
+	return true;
 }
-
+void CameraActor::CreateSkyboxPipeline(VulkanRenderer* vRenderer)
+{
+	std::vector<VkDescriptorSetLayout> skyboxLayouts = { 
+		CameraUBOinfo.descriptorSetLayout, 
+		GetComponent<DescriptorSetInfo>()->descriptorSetLayout 
+	 };
+	skyboxPipelineInfo = vRenderer->CreateSkyboxPipeline(skyboxLayouts, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv");
+}
 void CameraActor::UpdateProjectionMatrix(const float fovy, const float aspectRatio, const float near, const float far)
 {
-	projectionMatrix = MMath::perspective(fovy, aspectRatio, near, far);
+	projectionMatrix = MMath::PerspectiveVulkan(fovy, aspectRatio, near, far);
+	UpdateFrustum();
 
 }
 
@@ -42,6 +82,7 @@ void CameraActor::UpdateViewMatrix()
 		Quaternion orientation = transformComponent->GetQuaternion();
 		Vec3 position = transformComponent->GetPosition();
 		position_orientation_Quat = MATHEX::DQMath::rotate(QMath::conjugate(orientation)) * MATHEX::DQMath::translate(-position);
+		UpdateFrustum();
 	}
 }
 
@@ -144,3 +185,85 @@ void CameraActor::SetQuat(const SDL_Event& sdlEvent)
 		}
 	UpdateViewMatrix();
 }
+
+//![Frustrum](../../ExamplePhotos/Frustrum.png)
+void CameraActor::UpdateFrustum()
+{
+	/*
+	 *
+	 Matrix4x4 ([ 0 , 4 , 8 , 12 
+				  1 , 5 , 9 , 12
+				  2 , 6 , 10 , 14
+				  3 , 7 , 11 , 15 ] );
+	
+	Row 1 (computes X): [ vp[0], vp[4], vp[8], vp[12] ]
+
+	Row 2 (computes Y): [ vp[1], vp[5], vp[9], vp[13] ]
+
+	Row 3 (computes Z): [ vp[2], vp[6], vp[10], vp[14] ]
+
+	Row 4 (computes W): [ vp[3], vp[7], vp[11], vp[15] ]
+	  
+	 */
+	
+	//  Calculate the combined View-Projection matrix
+	Matrix4 vp = projectionMatrix * GetViewMatrix();
+	
+	// Left plane: row 4 + row 1
+	frustum.left_plane = MATHEX::PMath::normalize(MATHEX::Plane(
+		vp[3] + vp[0], vp[7] + vp[4], vp[11] + vp[8], vp[15] + vp[12]
+	));
+
+	// Right plane: row 4 - row 1
+	frustum.right_plane = MATHEX::PMath::normalize(MATHEX::Plane(
+		vp[3] - vp[0], vp[7] - vp[4], vp[11] - vp[8], vp[15] - vp[12]
+	));
+
+	// Bottom plane: row 4 + row 2
+	frustum.bottom_plane = MATHEX::PMath::normalize(MATHEX::Plane(
+		vp[3] + vp[1], vp[7] + vp[5], vp[11] + vp[9], vp[15] + vp[13]
+	));
+
+	// Top plane: row 4 - row 2
+	frustum.top_plane = MATHEX::PMath::normalize(MATHEX::Plane(
+		vp[3] - vp[1], vp[7] - vp[5], vp[11] - vp[9], vp[15] - vp[13]
+	));
+
+	// Near plane: row 4 + row 3
+	frustum.front_plane = MATHEX::PMath::normalize(MATHEX::Plane(
+		vp[3] + vp[2], vp[7] + vp[6], vp[11] + vp[10], vp[15] + vp[14]
+	));
+
+	// Far plane: row 4 - row 3
+	frustum.back_plane = MATHEX::PMath::normalize(MATHEX::Plane(
+		vp[3] - vp[2], vp[7] - vp[6], vp[11] - vp[10], vp[15] - vp[14]
+	));
+}
+
+FrustumCollision CameraActor::CheckFrustum(Matrix4 modelMatrix)
+{
+	Vec3 position(modelMatrix[12], modelMatrix[13], modelMatrix[14]);
+	
+	if (MATHEX::PMath::distance(position, frustum.front_plane) < -cullRadius) {
+		return FrustumCollision::CULLED_NEAR; 
+	}
+	if (MATHEX::PMath::distance(position, frustum.left_plane) < -cullRadius) {
+		return FrustumCollision::CULLED_LEFT; 
+	}
+	if (MATHEX::PMath::distance(position, frustum.right_plane) < -cullRadius) {
+		return FrustumCollision::CULLED_RIGHT; 
+	}
+	if (MATHEX::PMath::distance(position, frustum.back_plane) < -cullRadius) {
+		return FrustumCollision::CULLED_FAR; 
+	}
+	if (MATHEX::PMath::distance(position, frustum.bottom_plane) < -cullRadius) {
+		return FrustumCollision::CULLED_BOTTOM; 
+	}
+	if (MATHEX::PMath::distance(position, frustum.top_plane) < -cullRadius) {
+		return FrustumCollision::CULLED_TOP;
+	}
+	return FrustumCollision::INSIDE;
+}
+
+
+

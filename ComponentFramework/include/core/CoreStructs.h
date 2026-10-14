@@ -4,7 +4,7 @@
 #include <VMath.h>
 #include <MMath.h>
 #include <Hash.h>
-#include <core/Component.h>
+#include "Component.h"
 using namespace MATH;
 
 struct BufferMemory {
@@ -20,7 +20,20 @@ struct Sampler2D : Component {
     VkImageView imageView;
     VkSampler sampler;
     std::string filename;
-    virtual bool OnCreate() override{return true;}
+    virtual bool OnCreate(VulkanRenderer* vRenderer) override{return true;}
+    virtual void OnDestroy() override{}
+    virtual void Update(const float deltaTime_) override{}
+    virtual void Render() const override{}
+};
+
+struct SamplerCube : Component {
+    SamplerCube(std::weak_ptr<Component> parent_ = std::weak_ptr<Component>()) : Component(parent_) {}
+    VkImage image;
+    VkDeviceMemory imageDeviceMemory;
+    VkImageView imageView;
+    VkSampler sampler;
+    std::string filenames[6];
+    virtual bool OnCreate(VulkanRenderer* vRenderer) override{return true;}
     virtual void OnDestroy() override{}
     virtual void Update(const float deltaTime_) override{}
     virtual void Render() const override{}
@@ -38,7 +51,7 @@ struct IndexedVertexBuffer : Component {
     
     std::string filename;
     
-    virtual bool OnCreate() override{return true;}
+    virtual bool OnCreate(VulkanRenderer* vRenderer) override{return true;}
     virtual void OnDestroy() override{}
     virtual void Update(const float deltaTime_) override{}
     virtual void Render() const override{}
@@ -84,7 +97,7 @@ struct DescriptorSetInfo : Component {
     std::string VertFilename;
     std::string FragFilename;
         
-    virtual bool OnCreate() override{return true;}
+    virtual bool OnCreate(VulkanRenderer* vRenderer) override{return true;}
     virtual void OnDestroy() override{}
     virtual void Update(const float deltaTime_) override{}
     virtual void Render() const override{}
