@@ -29,7 +29,7 @@ bool Actor::OnCreate(VulkanRenderer* vRenderer) {
             std::string fragName = GetComponent<DescriptorSetInfo>()->FragFilename;
             {
                 DescriptorSetBuilder actorDescriptorBuilder(vRenderer->getDevice());
-                actorDescriptorBuilder.add(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, GetComponent<Sampler2D>().get());
+                actorDescriptorBuilder.add(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, GetComponent<Sampler2D>().get());
                 *GetComponent<DescriptorSetInfo>() = actorDescriptorBuilder.BuildDescriptorSet(vRenderer->getNumSwapchains());
             }
     
@@ -54,6 +54,14 @@ void Actor::Update(const float deltaTime) {
 }
 
 void Actor::Render() const {}
+
+void Actor::render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo)
+{
+    vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 2,GetComponent<DescriptorSetInfo>()->descriptorSet); 
+    vRenderer->SetPushConstant(pipelineInfo, GetModelMatrix());
+    vRenderer->BindMesh(*GetComponent<IndexedVertexBuffer>());
+    vRenderer->DrawIndexed(*GetComponent<IndexedVertexBuffer>());
+}
 
 
 void Actor::ListComponents() const {

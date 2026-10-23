@@ -1,0 +1,385 @@
+﻿# ComponentFramework
+#
+# Three programs and the vendored math library. Each program has its own main(), which is why
+# each one is its own target. The memory monitor is not a target: it is two files, and each
+# program that wants it compiles them.
+#
+# Configure one build tree per platform, each holding both configurations:
+#
+#   cmake --preset x64
+#   cmake --build --preset x64-Debug
+#
+# CMakePresets.json holds the generator, the toolset and the build directory, so an IDE picks
+# the same ones the scripts do. The toolset is pinned on purpose: a machine with more than one
+# set of Build Tools installed will otherwise take whichever is newest, and the saved demo
+# output was captured with v143.
+
+cmake_minimum_required(VERSION 3.25)
+
+# C is here for SDL3, which is a C library. Our own code is all C++.
+project(ComponentFramework LANGUAGES CXX C)
+
+if (NOT MSVC)
+    message(FATAL_ERROR
+            "MemoryMonitor uses SRWLOCK and _aligned_malloc, which are Microsoft only. "
+            "See \"It does not build outside Windows and MSVC\" in README.md.")
+endif ()
+
+# Four configurations existed and four survive. CMake would otherwise add RelWithDebInfo
+# and MinSizeRel, which nothing here has ever been built with.
+if (CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
+endif ()
+
+# CMake hands MSVC /DWIN32 and /D_WINDOWS on every platform. The old build defined WIN32 on
+# 32 bit only and never defined _WINDOWS, so they are taken out here and WIN32 is put back
+# per platform in ge5_apply_common_settings.
+string(REGEX REPLACE "[-/]D[ ]*WIN32" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REGEX REPLACE "[-/]D[ ]*_WINDOWS" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(STRIP "${CMAKE_CXX_FLAGS}" CMAKE_CXX_FLAGS)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(CommonSettings)
+
+# Programs and libraries land here, one folder per platform and configuration, exactly where
+# MSBuild put them. GE5_PLATFORM comes from CommonSettings.cmake and holds x64 or Win32 under
+# any generator. The $<CONFIG> is written out so CMake does not append a second config folder
+# of its own.
+set(GE5_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin/${GE5_PLATFORM}/$<CONFIG>")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${GE5_OUTPUT_DIR}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${GE5_OUTPUT_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${GE5_OUTPUT_DIR}")
+set(CMAKE_PDB_OUTPUT_DIRECTORY "${GE5_OUTPUT_DIR}")
+
+# Start the IDE on something that runs. The engine is 64 bit only, so on Win32 it is the demo
+# that the IDE opens on.
+if (GE5_PLATFORM STREQUAL "x64")
+    set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ComponentFramework)
+else ()
+    set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT MemoryMonitorDemo)
+endif ()
+
+
+# ============================== MemoryMonitor ==============================
+#
+# Not a target. The monitor is two files, and each program that wants it compiles them, which
+# is exactly what README.md tells anyone else to do with it: put include/ on the include path
+# and compile the .cpp.
+#
+# It used to be a static library. That made Main.cpp's call to MemoryMonitor::GetStats() load
+# bearing, because a linker only takes the parts of a static library that something asks for,
+# and with no call the operator new replacement was quietly left out. Compiled straight into
+# each program, it is always there and that trap is gone.
+
+set(MEMORYMONITOR_SOURCES
+        src/utils/MemoryMonitor.cpp
+        include/utils/MemoryMonitor.h
+)
+
+
+# ============================== MathLibrary ==============================
+#
+# The headers are split out into their own interface target. MemoryMonitorDemo needs to
+# reach Vector.h but must not link the library, and this says so in one line.
+
+add_library(MathLibraryHeaders INTERFACE)
+target_include_directories(MathLibraryHeaders INTERFACE
+        external/MathLibrary/include
+        external/glm
+)
+
+# Globbed because these headers are browsing material for the IDE. They compile nothing:
+# the three .cpp files below are the build, and they are listed by hand.
+file(GLOB MATHLIBRARY_HEADERS CONFIGURE_DEPENDS "external/MathLibrary/include/*.h")
+
+add_library(MathLibrary STATIC
+        # DebugUtlities.cpp needs glm, vendored next door under external/glm
+        external/MathLibrary/include/DebugUtlities.cpp
+        external/MathLibrary/include/Fourier.cpp
+        external/MathLibrary/include/Randomizer.cpp
+        ${MATHLIBRARY_HEADERS}
+)
+target_link_libraries(MathLibrary PUBLIC MathLibraryHeaders)
+ge5_apply_common_settings(MathLibrary)
+
+
+# ============================== ComponentFramework ==============================
+#
+# The engine. Everything under src/ and include/ belongs to it, the memory monitor included.
+#
+# 64 bit only, and the Vulkan SDK is the reason. It ships Lib and no Lib32, so there is no 32
+# bit vulkan-1.lib to link against. Everything inside this branch, SDL3 included, is skipped
+# on Win32, which keeps that configure quick and free of network access. The math library, the
+# demo and the tests still build for both platforms, and those are what
+# scripts/capture-output.sh and scripts/run-tests.bat measure.
+
+if (GE5_PLATFORM STREQUAL "x64")
+
+    # Vulkan comes from the installed SDK and is never vendored. There is nothing to ship
+    # either: vulkan-1.dll already sits in System32, put there by the graphics driver, and the
+    # validation layers are found by the loader wherever the SDK installed them.
+    find_package(Vulkan QUIET)
+    if (NOT Vulkan_FOUND)
+        message(FATAL_ERROR
+                "The Vulkan SDK was not found. Install it from https://vulkan.lunarg.com, then open "
+                "a new terminal so that VULKAN_SDK is set.
+"
+                "ComponentFramework is the only target that needs it. MemoryMonitorDemo and "
+                "MemoryMonitorTests build without it, and the Win32 preset skips the engine "
+                "altogether.")
+    endif ()
+    if (NOT Vulkan_GLSLC_EXECUTABLE)
+        message(FATAL_ERROR
+                "The Vulkan SDK was found at ${Vulkan_INCLUDE_DIR} but glslc.exe was not. Shaders "
+                "cannot be compiled without it. A full SDK install ships it under Bin.")
+    endif ()
+
+    # SDL3 is built from source at a pinned tag rather than vendored as binaries, so a fresh
+    # clone of this repository builds without a prepared machine. Shared, because that is how
+    # SDL ships and what it recommends.
+    include(FetchContent)
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+    set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(SDL3
+            GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+            GIT_TAG release-3.2.18
+            GIT_SHALLOW TRUE
+            GIT_PROGRESS TRUE
+    )
+    FetchContent_MakeAvailable(SDL3)
+
+    # No step here copies SDL3.dll next to the exe, and none is needed. SDL is brought in as a
+    # subdirectory after CMAKE_RUNTIME_OUTPUT_DIRECTORY is set above, so its own targets inherit
+    # it and SDL3.dll is built straight into bin/<platform>/<configuration>/. Scope those output
+    # directories per target one day and the dll stops arriving, and the engine will not start.
+
+    # Everything under src/ and include/ is the engine. Add a file anywhere in either tree and
+    # the next build picks it up, with no edit here. CONFIGURE_DEPENDS is what makes CMake look
+    # at the folders again on every build rather than only when this file changes.
+    file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+    file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS "include/*.h")
+
+    add_executable(ComponentFramework
+            Main.cpp
+            ${ENGINE_SOURCES}
+            ${ENGINE_HEADERS}
+    )
+
+    # Its own headers, reached as "core/Window.h" and "utils/MemoryMonitor.h"
+    target_include_directories(ComponentFramework PRIVATE include)
+    # stb_image and tiny_obj_loader, reached as "stb_image.h" and "tiny_obj_loader.h" respectively. SYSTEM marks them as someone else's code, so its
+    # warnings stay out of our build output.
+    target_include_directories(ComponentFramework SYSTEM PRIVATE external/stb)
+    target_include_directories(ComponentFramework SYSTEM PRIVATE external/tinyobjloader)
+    target_link_libraries(ComponentFramework PRIVATE MathLibrary SDL3::SDL3 Vulkan::Vulkan)
+
+    # glm defaults to the OpenGL depth range of -1 to 1. Vulkan's is 0 to 1, and a projection
+    # matrix built for the wrong one is wrong quietly: things still draw, at the wrong depth.
+    # GLM_FORCE_RADIANS only removes a deprecated degrees path, but it is worth being explicit.
+    target_compile_definitions(ComponentFramework PRIVATE
+            GLM_FORCE_DEPTH_ZERO_TO_ONE
+            GLM_FORCE_RADIANS
+    )
+
+    ge5_apply_common_settings(ComponentFramework)
+
+    # DLSS
+    # DLSS
+    add_custom_command(TARGET ComponentFramework POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/Upscaling/NVIDIA/dll"
+            "$<TARGET_FILE_DIR:ComponentFramework>"
+            COMMENT "Copying Streamline DLLs to output directory"
+    )
+
+    # Shaders. Drop a .vert or .frag into shaders/ and the next build compiles it to SPIR-V, the
+    # same way a new .cpp under src/ is picked up. Change one shader and only that one is
+    # compiled again, because each has its own rule keyed on its own file.
+    #
+    # The SPIR-V keeps the folder layout it had under shaders/, and keeps the stage in its name:
+    # triangle.vert becomes shaders/triangle.vert.spv. Dropping the stage would make
+    # triangle.vert and triangle.frag fight over one output file.
+    file(GLOB_RECURSE SHADER_SOURCES CONFIGURE_DEPENDS
+            "shaders/*.vert"
+            "shaders/*.frag"
+            "shaders/*.comp"
+            "shaders/*.geom"
+            "shaders/*.tesc"
+            "shaders/*.tese"
+    )
+
+    set(SPIRV_FILES "")
+    foreach (shader IN LISTS SHADER_SOURCES)
+        file(RELATIVE_PATH shader_relative "${CMAKE_CURRENT_SOURCE_DIR}/shaders" "${shader}")
+        set(spirv "${GE5_OUTPUT_DIR}/shaders/${shader_relative}.spv")
+        get_filename_component(spirv_directory "${spirv}" DIRECTORY)
+        add_custom_command(
+                OUTPUT "${spirv}"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory "${spirv_directory}"
+                COMMAND "${Vulkan_GLSLC_EXECUTABLE}" "${shader}" -o "${spirv}"
+                DEPENDS "${shader}"
+                COMMENT "glslc shaders/${shader_relative}"
+                VERBATIM
+        )
+        list(APPEND SPIRV_FILES "${spirv}")
+    endforeach ()
+
+    # SOURCES puts the shaders in the IDE tree, where they can be opened and edited.
+    add_custom_target(Shaders DEPENDS ${SPIRV_FILES} SOURCES ${SHADER_SOURCES})
+    add_dependencies(ComponentFramework Shaders)
+
+    # Assets. Every file under assets/ is copied next to the executable with its folder layout:
+    # assets/textures/skull_texture.jpg lands in bin/<platform>/<config>/assets/textures/. Like
+    # the shaders, each file has its own rule, so only a changed file is copied again.
+    file(GLOB_RECURSE ASSET_SOURCES CONFIGURE_DEPENDS "assets/*")
+
+    set(ASSET_COPIES "")
+    foreach (asset IN LISTS ASSET_SOURCES)
+        file(RELATIVE_PATH asset_relative "${CMAKE_CURRENT_SOURCE_DIR}" "${asset}")
+        set(asset_copy "${GE5_OUTPUT_DIR}/${asset_relative}")
+        get_filename_component(asset_directory "${asset_copy}" DIRECTORY)
+        add_custom_command(
+                OUTPUT "${asset_copy}"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory "${asset_directory}"
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${asset}" "${asset_copy}"
+                DEPENDS "${asset}"
+                COMMENT "copy ${asset_relative}"
+                VERBATIM
+        )
+        list(APPEND ASSET_COPIES "${asset_copy}")
+    endforeach ()
+
+    add_custom_target(Assets DEPENDS ${ASSET_COPIES} SOURCES ${ASSET_SOURCES})
+    add_dependencies(ComponentFramework Assets)
+
+else ()
+
+    message(STATUS
+            "ComponentFramework and SDL3 are skipped on ${GE5_PLATFORM}. The Vulkan SDK has no 32 bit "
+            "vulkan-1.lib. MathLibrary, the demo and the tests still build.")
+
+endif ()
+
+
+# ============================== MemoryMonitorDemo ==============================
+#
+# A walk through every path the monitor watches, and the subject of scripts/capture-output.sh,
+# which is how a change is shown to have moved nothing. It compiles the monitor and reaches the
+# math headers, and that is all it needs.
+
+add_executable(MemoryMonitorDemo
+        demo/MemoryMonitorDemo.cpp
+        ${MEMORYMONITOR_SOURCES}
+)
+target_include_directories(MemoryMonitorDemo PRIVATE include)
+target_link_libraries(MemoryMonitorDemo PRIVATE MathLibraryHeaders)
+ge5_apply_common_settings(MemoryMonitorDemo)
+
+
+# ============================== MemoryMonitorTests ==============================
+#
+# /sdl off, and only here.
+#
+# /sdl overwrites a pointer with a junk address as soon as it is deleted, so a stale pointer
+# cannot be used again. The tests delete the same pointer twice on purpose, and under /sdl the
+# second delete hands the monitor a wild address instead of a stale one. The monitor reads the
+# header in front of the block to decide whether to refuse the free, and reading it at a wild
+# address is an access violation. See "It does not survive a truly wild pointer" in the README.
+#
+# Everything else in this file keeps /sdl. That includes the engine's own copy of the monitor,
+# so what ships is still built with it.
+
+add_executable(MemoryMonitorTests
+        tests/MemoryMonitorTests.cpp
+        ${MEMORYMONITOR_SOURCES}
+)
+target_include_directories(MemoryMonitorTests PRIVATE include)
+ge5_apply_common_settings(MemoryMonitorTests SDL_CHECK OFF)
+
+
+# ============================== EcsTests ==============================
+#
+# The ECS checks, which used to live in Main.cpp and moved out once Main had to become a real
+# program rather than a test runner.
+#
+# Built for both platforms, unlike the engine. Everything under src/ecs is standard C++ with no
+# SDL, no Vulkan and no math library, so there is nothing here that Win32 cannot compile.
+
+file(GLOB_RECURSE ECS_SOURCES CONFIGURE_DEPENDS "src/ecs/*.cpp")
+file(GLOB_RECURSE ECS_HEADERS CONFIGURE_DEPENDS "include/ecs/*.h")
+
+# The World allocates from an arena, so every program that compiles the ECS compiles these too.
+list(APPEND ECS_SOURCES src/utils/Arena.cpp src/utils/ArenaResource.cpp)
+list(APPEND ECS_HEADERS include/utils/Arena.h include/utils/ArenaResource.h)
+
+add_executable(EcsTests
+        tests/EcsTests.cpp
+        ${ECS_SOURCES}
+        ${ECS_HEADERS}
+)
+target_include_directories(EcsTests PRIVATE include)
+ge5_apply_common_settings(EcsTests)
+
+# ============================== ArenaTests ==============================
+#
+# The arena's checks. Two files and no dependencies, so it builds for both platforms.
+
+add_executable(ArenaTests
+        tests/ArenaTests.cpp
+        src/utils/Arena.cpp
+        src/utils/ArenaResource.cpp
+        include/utils/Arena.h
+        include/utils/ArenaResource.h
+)
+target_include_directories(ArenaTests PRIVATE include)
+ge5_apply_common_settings(ArenaTests)
+
+
+# ============================== ArenaDemo ==============================
+#
+# The same work on the heap and from an arena, counted by the memory monitor. Built for both
+# platforms: it compiles the ECS, the arena and the monitor, and nothing else.
+
+add_executable(ArenaDemo
+        demo/ArenaDemo.cpp
+        ${MEMORYMONITOR_SOURCES}
+        ${ECS_SOURCES}
+        ${ECS_HEADERS}
+)
+target_include_directories(ArenaDemo PRIVATE include)
+ge5_apply_common_settings(ArenaDemo)
+
+
+# ============================== EcsBench ==============================
+#
+# A load for the profiler, and the only program here big enough for a sampling profiler to
+# find anything. Not a test: it takes seconds to run and it measures rather than checks, so
+# ctest never launches it.
+#
+# Built for both platforms like EcsTests. It compiles the ECS and the profiler and nothing
+# else, so there is no SDL and no Vulkan in it.
+
+add_executable(EcsBench
+        bench/EcsBench.cpp
+        src/utils/Profiler.cpp
+        include/utils/Profiler.h
+        ${ECS_SOURCES}
+        ${ECS_HEADERS}
+)
+target_include_directories(EcsBench PRIVATE include)
+ge5_apply_common_settings(EcsBench)
+
+
+# One program per test. Each counts its own checks and returns non zero if any of them fail.
+# A crash comes back as a large negative number, and CTest calls that a failure too, which
+# is the trap scripts/run-tests.bat used to have to sidestep by hand.
+#
+#   ctest --test-dir build/cmake-x64 -C Debug -V
+enable_testing()
+add_test(NAME MemoryMonitorTests COMMAND MemoryMonitorTests)
+add_test(NAME EcsTests COMMAND EcsTests)
+add_test(NAME ArenaTests COMMAND ArenaTests)

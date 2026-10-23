@@ -1,5 +1,6 @@
-﻿/*#include <Upscalers/DLSS/DLSSManager.h>
+﻿#include <Upscalers/DLSS/DLSSManager.h>
 #include <iostream>
+#include <core/Debug.h>
 
 DLSSManager::DLSSManager() = default;
 
@@ -7,33 +8,42 @@ DLSSManager::~DLSSManager() {
     Shutdown();
 }
 
-bool DLSSManager::Initialize(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t appId, const wchar_t* dataPath) {
-    m_device = device;
+bool DLSSManager::PreInitialize() {
+    // 1. Define the features you want Streamline to load
+    sl::Feature featuresToLoad[] = { sl::kFeatureDLSS };
 
-    // Define Streamline Preferences
+    // 2. Define Streamline Preferences
     sl::Preferences pref = {};
-    pref.applicationId = appId;
-    pref.pathToLogsAndData = dataPath;
-    pref.pathsToPlugins = &dataPath;
-    pref.numPathsToPlugins = 1;
+    pref.applicationId = 0; 
     pref.renderAPI = sl::RenderAPI::eVulkan;
     pref.showConsole = true;           
     pref.logLevel = sl::LogLevel::eDefault;
+    
+    // 3. Attach the features array
+    pref.featuresToLoad = featuresToLoad;
+    pref.numFeaturesToLoad = 1;
 
     // Initialize Streamline Core
-    sl::Result result = slInit(pref, SL_VERSION_PATCH);
+    sl::Result result = slInit(pref);
     if (result != sl::Result::eOk) {
         std::cerr << "[Streamline] Failed to initialize Streamline! Error code: " << (int)result << std::endl;
         return false;
     }
+    
+    std::cout << "[Streamline] Core initialized successfully." << std::endl;
+    return true;
+}
 
-    // Set Vulkan Device Info for Streamline
+bool DLSSManager::SetVulkanInfo(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
+    Device = device;
+    
+    // Pass Vulkan handles to Streamline so it can hook the rendering pipeline
     sl::VulkanInfo vkInfo = {};
     vkInfo.instance = instance;
     vkInfo.physicalDevice = physicalDevice;
     vkInfo.device = device;
     
-    result = slSetVulkanInfo(vkInfo);
+    sl::Result result = slSetVulkanInfo(vkInfo);
     if (result != sl::Result::eOk) {
         std::cerr << "[Streamline] Failed to set Vulkan info! Error code: " << (int)result << std::endl;
         return false;
@@ -43,22 +53,22 @@ bool DLSSManager::Initialize(VkInstance instance, VkPhysicalDevice physicalDevic
     sl::AdapterInfo adapterInfo = {};
     adapterInfo.vkPhysicalDevice = physicalDevice;
 
-    bool supported = false;
     result = slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo);
 
-    if (result == sl::Result::eOk && supported) {
+    if (result == sl::Result::eOk) {
         std::cout << "[Streamline] DLSS Super Resolution is fully supported on this GPU!" << std::endl;
-        m_isSupported = true;
+        isSupported = true;
     } else {
         std::cout << "[Streamline] DLSS Super Resolution is NOT supported on this hardware. Result: " << (int)result << std::endl;
-        m_isSupported = false;
+        isSupported = false;
     }
 
-    return m_isSupported;
+    return isSupported;
 }
 
+
 void DLSSManager::UpdateFrameConstants(const DLSSFrameParams& params, uint32_t frameIndex) {
-    if (!m_isSupported) return;
+    if (!isSupported) return;
 
     sl::ViewportHandle viewport(0);
     
@@ -84,7 +94,7 @@ void DLSSManager::UpdateFrameConstants(const DLSSFrameParams& params, uint32_t f
 }
 
 void DLSSManager::TagResources(VkCommandBuffer cmdBuffer, const DLSSResourceBindings& resources) {
-    if (!m_isSupported) return;
+    if (!isSupported) return;
 
     auto colorRes   = sl::Resource(sl::ResourceType::eTex2d, resources.colorBufferImage);
     auto depthRes   = sl::Resource(sl::ResourceType::eTex2d, resources.depthBufferImage);
@@ -103,7 +113,7 @@ void DLSSManager::TagResources(VkCommandBuffer cmdBuffer, const DLSSResourceBind
 }
 
 void DLSSManager::EvaluateDLSS(VkCommandBuffer cmdBuffer) {
-    if (!m_isSupported) return;
+    if (!isSupported) return;
 
     sl::FrameToken* frameToken = nullptr;
     uint32_t currentFrameIndex = 0;
@@ -117,4 +127,4 @@ void DLSSManager::EvaluateDLSS(VkCommandBuffer cmdBuffer) {
 void DLSSManager::Shutdown() {
     slShutdown();
     std::cout << "[Streamline] Shut down successfully." << std::endl;
-}*/
+}

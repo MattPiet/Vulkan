@@ -7,8 +7,8 @@
 #include <unordered_map>
 
 struct timingTag {
-    std::string startLocation;
-    std::string endLocation;
+    const char* startLocation;
+    const char* endLocation;
     std::chrono::time_point<std::chrono::high_resolution_clock> startTimeMonitor;
     std::chrono::time_point<std::chrono::high_resolution_clock> endTimeMonitor;
     int startLine = 0;

@@ -3,7 +3,10 @@
 Sampler2D VulkanRenderer::Create2DTextureImage(const char* textureFile) {
 
     Sampler2D texture2D;
-    SDL_Surface* image = IMG_Load(textureFile);
+    SDL_Surface* rawImage = IMG_Load(textureFile);
+    // Convert to a guaranteed 32-bit RGBA format
+    SDL_Surface* image = SDL_ConvertSurface(rawImage, SDL_PIXELFORMAT_RGBA32);
+    SDL_DestroySurface(rawImage); // Free the original 24-bit surfaceS
     VkDeviceSize imageSize = image->w * image->h * 4; /// RGBA only please
 
     BufferMemory stagingBuffer{};
@@ -196,13 +199,13 @@ SamplerCube VulkanRenderer::CreateCubeMapTexture(const std::string faces[6]) {
     VkDeviceSize layerSize = width * height * 4; // 4 bytes for RGBA
     VkDeviceSize totalSize = layerSize * 6;
 
-    // 2. CREATE STAGING BUFFER
+    // CREATE STAGING BUFFER
     BufferMemory stagingBuffer{};
     CreateBuffer(totalSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                  stagingBuffer.bufferID, stagingBuffer.bufferMemoryID);
 
-    // 3. COPY SDL PIXELS TO STAGING BUFFER
+    // COPY SDL PIXELS TO STAGING BUFFER
     void* data;
     vkMapMemory(device, stagingBuffer.bufferMemoryID, 0, totalSize, 0, &data);
     for (int i = 0; i < 6; i++) {
@@ -210,12 +213,12 @@ SamplerCube VulkanRenderer::CreateCubeMapTexture(const std::string faces[6]) {
     }
     vkUnmapMemory(device, stagingBuffer.bufferMemoryID);
 
-    // 4. ALLOCATE THE CUBEMAP IMAGE ON THE GPU
+    // ALLOCATE THE CUBEMAP IMAGE ON THE GPU
     createCubeImage(width, height, 1, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureCube.image, textureCube.imageDeviceMemory);
 
-    // 5. USE VULKAN COMMANDS TO MOVE PIXELS FROM STAGING BUFFER TO CUBEMAP
+    // USE VULKAN COMMANDS TO MOVE PIXELS FROM STAGING BUFFER TO CUBEMAP
     VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
     // Prepare image to receive data
@@ -243,14 +246,14 @@ SamplerCube VulkanRenderer::CreateCubeMapTexture(const std::string faces[6]) {
 
     endSingleTimeCommands(commandBuffer);
 
-    // 6. CLEAN UP CPU MEMORY
+    //  CLEAN UP CPU MEMORY
     for (int i = 0; i < 6; i++) {
         SDL_DestroySurface(surfaces[i]);
     }
     vkDestroyBuffer(device, stagingBuffer.bufferID, nullptr);
     vkFreeMemory(device, stagingBuffer.bufferMemoryID, nullptr);
 
-    // 7. CREATE VIEWS AND SAMPLERS
+    // CREATE VIEWS AND SAMPLERS
     textureCube.imageView = createCubeImageView(textureCube.image, VK_FORMAT_R8G8B8A8_SRGB, 1);
     
     // Reuse your existing texture sampler code

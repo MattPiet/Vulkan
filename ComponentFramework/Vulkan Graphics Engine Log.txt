@@ -2,11 +2,7 @@
 [INFO]: Created Scene0: 
 [INFO]: Loading assets for Actor: 
 [INFO]: Loading assets for Actor: 
-[INFO]: Created Scene1: 
 [INFO]: Loading assets for Actor: 
-[INFO]: Loading assets for Actor: 
-[INFO]: Deleting assets for Actor: 
-[INFO]: Deleting assets for Actor: 
 [INFO]: Deleting assets for Actor: 
 [INFO]: Deleting assets for Actor: 
 [INFO]: Deleting assets for Actor: 

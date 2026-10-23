@@ -28,6 +28,8 @@
 #include <MMath.h>
 #include <Hash.h>
 #include <core/ML.h>
+
+#include "Upscalers/DLSS/DLSSManager.h"
 using namespace MATH;
 
 
@@ -122,6 +124,13 @@ enum Recording {
     STOP
 };
 
+enum Upscaler
+{
+    DLSS,
+    FSR
+};
+
+
 class VulkanRenderer : public Renderer {
     /// C11 precautions 
     VulkanRenderer(const VulkanRenderer&) = delete;  /// Copy constructor
@@ -129,7 +138,8 @@ class VulkanRenderer : public Renderer {
     VulkanRenderer& operator=(const VulkanRenderer&) = delete; /// Copy operator
     VulkanRenderer& operator=(VulkanRenderer&&) = delete;      /// Move operator
 
-
+    std::unique_ptr<DLSSManager> dlss_manager;
+    Upscaler upscaler_;
 public: /// Member functions
     VulkanRenderer();
     ~VulkanRenderer();

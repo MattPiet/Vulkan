@@ -35,7 +35,7 @@ bool Scene1::OnCreate() {
 				"MarioFire",
 				"MarioMime",
 			};
-			std::lock_guard<std::mutex> lock(vulkanMutex);
+			std::scoped_lock<std::mutex> lock(vulkanMutex);
 			camera_actor_ = std::dynamic_pointer_cast<CameraActor>(assetManager->xmlAssets.find("Camera")->second);
 			camera_actor_->OnCreate(vRenderer);
 			
@@ -56,7 +56,7 @@ bool Scene1::OnCreate() {
 				ActorList[name] = std::dynamic_pointer_cast<Actor>(iterator->second);
 				ActorList[name]->OnCreate(vRenderer);
 			}
-			// this makes one pipeline for everything 
+			
 			std::vector<VkDescriptorSetLayout> pipelineLayouts = {
 				camera_actor_->GetCameraUBODescriptorSetInfo().descriptorSetLayout, 
 				lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,

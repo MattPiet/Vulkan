@@ -7,6 +7,8 @@
 #include <memory>
 #include <core/ML.h>
 
+#include "CoreStructs.h"
+
 class Actor : public Component {
     Actor(const Actor&) = delete;
     Actor(Actor&&) = delete;
@@ -24,6 +26,7 @@ public:
     virtual void OnDestroy() override;
     virtual void Update(const float deltaTime) override;
     virtual void Render() const override;
+   void render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo);
 
     template<typename ComponentTemplate>
     void AddComponent(std::shared_ptr<ComponentTemplate> component_) {

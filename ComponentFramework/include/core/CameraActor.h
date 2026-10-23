@@ -108,6 +108,8 @@ public:
 	void UpdateFrustum();
 	FrustumCollision CheckFrustum(Matrix4 modelMatrix);
 	
+	void render(VulkanRenderer* vRenderer);
+	
 };
 
 

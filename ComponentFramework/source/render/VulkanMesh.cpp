@@ -3,7 +3,8 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "core/tiny_obj_loader.h"
 #include <core/Profiling.h>
-
+#include <filesystem>
+#include <cstring>
 
 IndexedVertexBuffer VulkanRenderer::LoadModelIndexed(const char* filename) {
     std::string name = "IndexedVertexBuffer, " + static_cast<std::string>(filename);
@@ -17,9 +18,91 @@ IndexedVertexBuffer VulkanRenderer::LoadModelIndexed(const char* filename) {
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
+    
+    
+std::string Filename = filename;
+std::string binFilename = Filename + ".bin"; 
+bool loaded = false;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename)) {
+if (std::filesystem::exists(binFilename) && std::filesystem::file_size(binFilename) > 0) 
+{
+    // Load the entire binary file into memory at once
+    std::vector<char> buffer = readFile(binFilename);
+    size_t offset = 0;
+
+    // Quick helper lambda to copy bytes from the buffer and advance the offset
+    auto readBytes = [&](void* dest, size_t size) {
+        std::memcpy(dest, buffer.data() + offset, size);
+        offset += size;
+    };
+
+    size_t verticesSize, normalsSize, uvSize, numShapes;
+
+    readBytes(&verticesSize, sizeof(size_t));
+    attrib.vertices.resize(verticesSize);
+    readBytes(attrib.vertices.data(), verticesSize * sizeof(float));
+
+    readBytes(&normalsSize, sizeof(size_t));
+    attrib.normals.resize(normalsSize);
+    readBytes(attrib.normals.data(), normalsSize * sizeof(float));
+
+    readBytes(&uvSize, sizeof(size_t));
+    attrib.texcoords.resize(uvSize);
+    readBytes(attrib.texcoords.data(), uvSize * sizeof(float));
+
+    // Read Shapes (Indices)
+    readBytes(&numShapes, sizeof(size_t));
+    shapes.resize(numShapes);
+    for (auto& shape : shapes) {
+        size_t iSize;
+        readBytes(&iSize, sizeof(size_t));
+        shape.mesh.indices.resize(iSize);
+        readBytes(shape.mesh.indices.data(), iSize * sizeof(tinyobj::index_t));
+    }
+
+    loaded = true;
+}
+
+// If the .bin didn't exist, parse the text file and create the .bin
+if (!loaded) 
+{
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, Filename.c_str())) {
         throw std::runtime_error(warn + err);
+    }
+
+    // Still use ofstream for writing, it's the cleanest way to dump memory to disk
+    std::ofstream out(binFilename, std::ios::binary);
+
+    size_t verticesSize = attrib.vertices.size();
+    out.write(reinterpret_cast<const char*>(&verticesSize), sizeof(size_t));
+    out.write(reinterpret_cast<const char*>(attrib.vertices.data()), verticesSize * sizeof(float));
+
+    size_t normalsSize = attrib.normals.size();
+    out.write(reinterpret_cast<const char*>(&normalsSize), sizeof(size_t));
+    out.write(reinterpret_cast<const char*>(attrib.normals.data()), normalsSize * sizeof(float));
+
+    size_t uvSize = attrib.texcoords.size();
+    out.write(reinterpret_cast<const char*>(&uvSize), sizeof(size_t));
+    out.write(reinterpret_cast<const char*>(attrib.texcoords.data()), uvSize * sizeof(float));
+
+    // Write Shapes (Indices)
+    size_t numShapes = shapes.size();
+    out.write(reinterpret_cast<const char*>(&numShapes), sizeof(size_t));
+    for (const auto& shape : shapes) {
+        size_t indicesSize = shape.mesh.indices.size();
+        out.write(reinterpret_cast<const char*>(&indicesSize), sizeof(size_t));
+        out.write(reinterpret_cast<const char*>(shape.mesh.indices.data()), indicesSize * sizeof(tinyobj::index_t));
+    }
+
+    out.close();
+    loaded = true;
+}
+    /*if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename)) {
+        throw std::runtime_error(warn + err);
+    }*/
+    if (!loaded)
+    {
+        throw std::runtime_error("Could not load Mesh File: " + static_cast<std::string>(filename) + ".");
     }
     size_t maxVertices = attrib.vertices.size() / 3;
     vertices.reserve(maxVertices);
@@ -180,3 +263,5 @@ void VulkanRenderer::DestroyIndexedMesh(IndexedVertexBuffer mesh){
     vkDestroyBuffer(device, mesh.indexBufferID, nullptr);
     vkFreeMemory(device, mesh.indexBufferMemoryID, nullptr);
 }
+
+

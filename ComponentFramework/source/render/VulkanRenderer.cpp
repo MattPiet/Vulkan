@@ -1,5 +1,6 @@
 #include "render/VulkanRenderer.h"
 #include "render/DescriptorSetBuilder.h"
+#include <Upscalers/DLSS/DLSSManager.h>
 #include "core/Debug.h"
 
 
@@ -28,6 +29,11 @@ SDL_Window* VulkanRenderer::CreateWindow(std::string name_, int width_, int heig
 }
 
 bool VulkanRenderer::OnCreate(){ 
+   // dlss_manager = std::make_unique<DLSSManager>();  
+    // for DLSS you must Initialize it before even creating the Vulkan Instance
+    //if (dlss_manager->PreInitialize()) upscaler_ = DLSS;
+
+    
     CreateInstance();
     setupDebugMessenger();
     if (!SDL_Vulkan_CreateSurface(window, instance, nullptr,&surface)) {
@@ -35,8 +41,10 @@ bool VulkanRenderer::OnCreate(){
         throw std::runtime_error("failed to create window");
     }
     
+    
     pickPhysicalDevice();
     createLogicalDevice();
+    //if (upscaler_ == DLSS) dlss_manager->SetVulkanInfo(instance, physicalDevice, device);
     createSwapChain(); 
     createImageViews();
     createRenderPass();
@@ -45,6 +53,7 @@ bool VulkanRenderer::OnCreate(){
     createCommandPool();
     CreateCommandBuffers();
     createSyncObjects();
+
     
     return true;
 }
@@ -186,7 +195,7 @@ void VulkanRenderer::CreateInstance() {
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "Game 308";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.apiVersion = VK_API_VERSION_1_2;
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -252,7 +261,6 @@ void VulkanRenderer::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDevice
     endSingleTimeCommands(commandBuffer);
 }
 
-
 void VulkanRenderer::pickPhysicalDevice() {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -264,16 +272,35 @@ void VulkanRenderer::pickPhysicalDevice() {
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
-    for (const auto& device : devices) {
-        if (isDeviceSuitable(device)) {
-            physicalDevice = device;
-            break;
+    VkPhysicalDevice fallbackDevice = VK_NULL_HANDLE;
+
+    for (const auto& d : devices) {
+        if (isDeviceSuitable(d)) {
+            VkPhysicalDeviceProperties deviceProperties;
+            vkGetPhysicalDeviceProperties(d, &deviceProperties);
+
+            if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                physicalDevice = d;
+                break;
+            }
+            else if (fallbackDevice == VK_NULL_HANDLE) {
+                fallbackDevice = d;
+            }
         }
+    }
+
+    if (physicalDevice == VK_NULL_HANDLE && fallbackDevice != VK_NULL_HANDLE) {
+        physicalDevice = fallbackDevice;
     }
 
     if (physicalDevice == VK_NULL_HANDLE) {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
+
+    // Fixed: properly query properties before printing
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(physicalDevice, &props);
+    std::cout << "Selected GPU for Vulkan: " << props.deviceName << std::endl;
 }
 
 void VulkanRenderer::createLogicalDevice() {
@@ -292,27 +319,46 @@ void VulkanRenderer::createLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
+    // 1. Setup Vulkan 1.2 Features
+    VkPhysicalDeviceVulkan12Features features12{};
+    features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    features12.bufferDeviceAddress = VK_TRUE; // Required for Streamline DLSS
+    features12.timelineSemaphore = VK_TRUE;   // Fixes VK_SEMAPHORE_TYPE_TIMELINE error
+
+    // 2. Setup Base Vulkan 1.0 Features and chain to 1.2
+    VkPhysicalDeviceFeatures2 deviceFeatures2{};
+    deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
+    deviceFeatures2.features.shaderStorageImageWriteWithoutFormat = VK_TRUE; // Fixes SPIR-V error
+    deviceFeatures2.pNext = &features12;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
 
-    createInfo.pEnabledFeatures = &deviceFeatures;
+    // Pass features via pNext, disable old pEnabledFeatures
+    createInfo.pEnabledFeatures = nullptr; 
+    createInfo.pNext = &deviceFeatures2;
 
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    // Ensure VK_KHR_push_descriptor is enabled to fix the layout errors
+    std::vector<const char*> activeExtensions = deviceExtensions;
+    bool hasPushDescriptor = false;
+    for (const char* ext : activeExtensions) {
+        if (strcmp(ext, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME) == 0) {
+            hasPushDescriptor = true;
+            break;
+        }
+    }
+    if (!hasPushDescriptor) {
+        activeExtensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    }
 
-    if (enableValidationLayers) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-        createInfo.ppEnabledLayerNames = validationLayers.data();
-    }
-    else {
-        createInfo.enabledLayerCount = 0;
-    }
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(activeExtensions.size());
+    createInfo.ppEnabledExtensionNames = activeExtensions.data();
+
+    // Fix the "enabledLayerCount is 1 (not zero)" error
+    createInfo.enabledLayerCount = 0; 
 
     if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
         throw std::runtime_error("failed to create logical device!");
@@ -939,7 +985,7 @@ void VulkanRenderer::BindDescriptorSet(VkPipelineLayout pipelineLayout, int firs
 void VulkanRenderer::SetPushConstant(const PipelineInfo pipelineInfo, const Matrix4& modelMatrix_) {
     ModelMatrixPushConst modelMatrixPushConst;
     modelMatrixPushConst.modelMatrix = modelMatrix_;
-    Matrix3 normalMatrix = Matrix3(MMath::transpose(MMath::inverse(modelMatrix_)));
+    Matrix3 normalMatrix = Matrix3(MMath::inverse(modelMatrix_));
 
     /// See the header file for an explanation of how I laid out this out in memory
     modelMatrixPushConst.normalMatrix[0].x = normalMatrix[0];

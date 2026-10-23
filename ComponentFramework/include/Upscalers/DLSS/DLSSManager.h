@@ -41,8 +41,10 @@ class DLSSManager {
 public:
     DLSSManager();
     ~DLSSManager();
-
-    bool Initialize(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t appId, const wchar_t* dataPath);
+    
+    bool PreInitialize();
+    bool SetVulkanInfo(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
+    
     void Shutdown();
 
     bool IsDLSSSupported() const { return isSupported; }
@@ -51,7 +53,7 @@ public:
     void EvaluateDLSS(VkCommandBuffer cmdBuffer);
 
 private:
-    VkDevice device = VK_NULL_HANDLE;
+    VkDevice Device = VK_NULL_HANDLE;
     bool isSupported = false;
     
     sl::DLSSMode GetDLSSMode(DLSSQualityMode mode) {

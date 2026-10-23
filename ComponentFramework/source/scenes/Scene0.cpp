@@ -27,37 +27,34 @@ bool Scene0::OnCreate() {
 	switch (renderer->getRendererType()){
 	case RendererType::VULKAN:
 	{
-		VulkanRenderer* vRenderer;
-		vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+		VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
 			
 			assetManager = std::make_shared<XMLAssetManager>();
 			std::vector<std::string> names{ 
 				"MarioFire",
 				"MarioMime",
+				"Rook"
 			};
 			
-			std::lock_guard<std::mutex> lock(vulkanMutex);
+			std::scoped_lock lock(vulkanMutex);
 			camera_actor_ = std::dynamic_pointer_cast<CameraActor>(assetManager->xmlAssets.find("Camera")->second);
 			camera_actor_->OnCreate(vRenderer);
 			
 			lightsManager = std::make_shared<LightsManager>(std::weak_ptr<Component>());
 			lightsManager->AddComponent(std::make_shared<DescriptorSetInfo>());
 			lightsManager->OnCreate(vRenderer);
+			lightsManager->renderMeshes = true;
 			
-			bool everythingLoaded = true;
 			for (const std::string& name : names) {
 				auto iterator = assetManager->xmlAssets.find(name);
 				if (iterator == assetManager->xmlAssets.end()) {
 					Debug::Error("Actor not found in Scene0.xml: " + name, __FILE__, __LINE__);
-					everythingLoaded = false;
 					continue; 
 				}
 				ActorList[name] = std::dynamic_pointer_cast<Actor>(iterator->second);
 				ActorList[name]->OnCreate(vRenderer);
 			}
-		
-			
-			// this makes one pipeline for everything 
+			// this makes one pipeline for everything (I'm a dirty liar the skybox has its own pipeline ;)
 			std::vector<VkDescriptorSetLayout> pipelineLayouts = {
 				camera_actor_->GetCameraUBODescriptorSetInfo().descriptorSetLayout, 
 				lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,
@@ -101,12 +98,10 @@ void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
 					"shaders/multiPhong.frag.spv"
 				);
 				camera_actor_->CreateSkyboxPipeline(vRenderer);
-				
 			}
 			break;
 		}
-	
-}
+	}
 void Scene0::Update(const float deltaTime) {
 	
 	if (renderer->getRendererType() == RendererType::VULKAN)
@@ -114,14 +109,46 @@ void Scene0::Update(const float deltaTime) {
 		VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
 		camera_actor_->CameraMovement(deltaTime, nullptr);
 		vRenderer->UpdateUniformBuffer<CameraData>(camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
+		
+		LightsData dynamicLights = lightsManager->GetLightsData(); 
+       
+		float pulseSpeed = 1.0f; 
+		float minRadius = 6.0f;
+		float maxRadius = 50.0f;
 
-		LightsData viewSpaceLights = lightsManager->GetLightsData(); 
-		for (int i = 0; i < viewSpaceLights.numLights; i++)
-		{
-			Vec4 worldPosition = viewSpaceLights.pos[i]; 
-			viewSpaceLights.pos[i] = camera_actor_->GetViewMatrix() * worldPosition; 
-		}
-		vRenderer->UpdateUniformBuffer<LightsData>(viewSpaceLights, lightsManager->GetLightsUBO());
+		// Use negative cos so the wave starts at the exact minimum value (0.0) at time = 0
+		float bounce = (-std::cos(elapsedTime * pulseSpeed) + 1.0f) * 0.5f;
+
+		float radius = minRadius + (maxRadius - minRadius) * bounce;
+
+		float speed = 1.0f;  // Rotation speed in radians per second
+
+		// Light 0
+		float x = radius * std::cos(elapsedTime * speed);
+		float z = radius * std::sin(elapsedTime * speed);
+		float y = lightsManager->getLightTransforms().at("0")->GetPosition().y;
+		lightsManager->setPosition("0", Vec3(x, y, z));
+       
+		// Light 1 (Offset by 90 degrees / 1.57 radians)
+		x = radius * std::cos(elapsedTime * speed + 1.57f);
+		z = radius * std::sin(elapsedTime * speed + 1.57f);
+		y = lightsManager->getLightTransforms().at("1")->GetPosition().y;
+		lightsManager->setPosition("1", Vec3(x, y, z));
+       
+		// Light 2 (Offset by 180 degrees / 3.14 radians)
+		x = radius * std::cos(elapsedTime * speed + 3.14f);
+		z = radius * std::sin(elapsedTime * speed + 3.14f);
+		y = lightsManager->getLightTransforms().at("2")->GetPosition().y;
+		lightsManager->setPosition("2", Vec3(x, y, z));
+       
+		// Light 3 (Offset by 270 degrees / 4.71 radians)
+		x = radius * std::cos(elapsedTime * speed + 4.71f);
+		z = radius * std::sin(elapsedTime * speed + 4.71f);
+		y = lightsManager->getLightTransforms().at("3")->GetPosition().y;
+		lightsManager->setPosition("3", Vec3(x, y, z));
+
+	
+		vRenderer->UpdateUniformBuffer<LightsData>(lightsManager->GetLightsData(), lightsManager->GetLightsUBO());
 		
 	}
 	elapsedTime += deltaTime;
@@ -130,12 +157,12 @@ void Scene0::Update(const float deltaTime) {
 	ActorList.at("MarioMime")->GetComponent<TransformComponent>()->SetOrientation
 	(QMath::angleAxisRotation(elapsedTime * 90.0f, Vec3(1.0f, 0.0f, 0.0f))) ;
 	
-	if (elapsedTime >= 5.0f && !hasLoaded)
+	/*if (elapsedTime >= 5.0f && !hasLoaded)
 	{
 		scene_number = 1;
 		loadStagedScene = true;
 		hasLoaded = true; // Lock it out from firing again
-	}
+	}*/
 }
 
 void Scene0::Render() const {
@@ -144,16 +171,10 @@ void Scene0::Render() const {
 		case RendererType::VULKAN:
 			{
 				VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-				std::lock_guard<std::mutex> lock(vulkanMutex);
+				std::scoped_lock lock(vulkanMutex);
 				vRenderer->RecordCommandBuffers(Recording::START);
 				
-				// Do all the sky box stuff first
-				vRenderer->BindPipeline(camera_actor_->GetSkyboxPipelineInfo().pipeline);
-				vRenderer->BindDescriptorSet(camera_actor_->GetSkyboxPipelineInfo().pipelineLayout, 0, camera_actor_->GetCameraUBODescriptorSetInfo().descriptorSet); // Set 0: Camera UBO
-				vRenderer->BindDescriptorSet(camera_actor_->GetSkyboxPipelineInfo().pipelineLayout, 1, camera_actor_->GetComponent<DescriptorSetInfo>()->descriptorSet); // Set 1: Cubemap Texture
-				vRenderer->BindMesh(*camera_actor_->GetComponent<IndexedVertexBuffer>());
-				vRenderer->DrawIndexed(*camera_actor_->GetComponent<IndexedVertexBuffer>());
-				
+				camera_actor_->render(vRenderer);
 				// Bind pipeline
 				vRenderer->BindPipeline(pipelineInfo.pipeline);
 				// bind Camera Once
@@ -163,35 +184,29 @@ void Scene0::Render() const {
 				for (const auto& [name, actor] : ActorList) {
 					switch (camera_actor_->CheckFrustum(actor->GetModelMatrix()) ) { 
 					case FrustumCollision::CULLED_NEAR:
-						std::cout << name << ": Clipped through Near Plane" << std::endl;
+						std::cout << name << ": Clipped through Near Plane\n";
 						break;
 					case FrustumCollision::CULLED_FAR:
-						std::cout << name << ": Clipped through Far Plane" << std::endl;
+						std::cout << name << ": Clipped through Far Plane\n";
 						break;
 					case FrustumCollision::CULLED_RIGHT:
-						std::cout << name << ": Clipped through Right Plane" << std::endl;
+						std::cout << name << ": Clipped through Right Plane\n";
 						break;
 					case FrustumCollision::CULLED_LEFT:
-						std::cout << name << ": Clipped through Left Plane" << std::endl;
+						std::cout << name << ": Clipped through Left Plane\n";
 						break;
 					case FrustumCollision::CULLED_TOP:
-						std::cout << name << ": Clipped through Top Plane" << std::endl;
+						std::cout << name << ": Clipped through Top Plane\n";
 						break;
 					case FrustumCollision::CULLED_BOTTOM:
-						std::cout << name << ": Clipped through Bottom Plane" << std::endl;
+						std::cout << name << ": Clipped through Bottom Plane\n";
 						break; 
 					default:
-						// bind mr mario
-						vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 2, actor->GetComponent<DescriptorSetInfo>()->descriptorSet); 
-						// set push constant
-						vRenderer->SetPushConstant(pipelineInfo, actor->GetModelMatrix());
-						// bind his mesh
-						vRenderer->BindMesh(*actor->GetComponent<IndexedVertexBuffer>());
-						// give him pants
-						vRenderer->DrawIndexed(*actor->GetComponent<IndexedVertexBuffer>());
+						actor->render(vRenderer, pipelineInfo);
 						break;
 					}
 				}
+				lightsManager->render(vRenderer,pipelineInfo);
 				// draw
 				vRenderer->RecordCommandBuffers(Recording::STOP);
 				vRenderer->Render();
@@ -199,7 +214,7 @@ void Scene0::Render() const {
 			}
 
 	case RendererType::OPENGL:
-		OpenGLRenderer* glRenderer;
+		/*OpenGLRenderer* glRenderer;
 		glRenderer = dynamic_cast<OpenGLRenderer*>(renderer);
 		/// Clear the screen
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -208,16 +223,16 @@ void Scene0::Render() const {
 		glEnable(GL_CULL_FACE);
 		/// Draw your scene here
 		glUseProgram(0);
-		
+			*/
 		break;
 	}
 }
 
 
 void Scene0::OnDestroy() {
-VulkanRenderer* vRenderer;
-    vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-    if(vRenderer){
+
+
+    if(VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer)){
        vkDeviceWaitIdle(vRenderer->getDevice());
 
        vRenderer->DestroyPipeline(pipelineInfo);
@@ -238,5 +253,19 @@ VulkanRenderer* vRenderer;
        }
        ActorList.clear();
        assetManager.reset();
+    	for (auto& [key, mesh] : lightsManager->lightMeshes) {
+    		if (mesh) {
+    			vRenderer->DestroyIndexedMesh(*mesh);
+    		}
+    	}
+    	for (auto& [key, mesh] : lightsManager->lightMeshes) {
+    		delete mesh;
+    	}
+    	for (auto& [key, transform] : lightsManager->getLightTransforms()) {
+    		delete transform;
+    	}
+    	
+    	lightsManager->OnDestroy();
+    	lightsManager.reset();
     }
 }

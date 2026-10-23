@@ -26,8 +26,20 @@ bool LightsManager::OnCreate(VulkanRenderer* vRenderer)
     lights.diffuse[3] = Vec4(0.5, 0.0, 0.5, 0.0);
     lights.specular[3] = Vec4(0.1, 0.0, 0.1, 0.0);
     lights.pos[3] = Vec4(4.0f, -5.0f, -5.0f, 0.0f);
-    
-   
+        lights.numLights = 4;
+        
+        for (int i = 0; i < lights.numLights; i++)
+        {
+            IndexedVertexBuffer* mesh = new IndexedVertexBuffer(std::weak_ptr<Component>());
+            *mesh = vRenderer->LoadModelIndexed("meshes/Cube.obj");
+            TransformComponent* ts = new TransformComponent(std::weak_ptr<Component>());
+            ts->SetPosition(lights.pos[i]); 
+            ts->SetScale(Vec3(1.0f, 1.0f, 1.0f)); // Prevents degenerate zero-scale matrices
+            lightMeshes.emplace(std::to_string(i), mesh);
+            LightTransforms.emplace(std::to_string(i), ts);
+        }
+        
+        
         // Very simple just makes the UBO and descriptor set for the lights data.
         LightsUBO = vRenderer->CreateUniformBuffers<LightsData>();
         DescriptorSetBuilder LightsDescriptorBuilder(vRenderer->getDevice());
@@ -40,5 +52,26 @@ bool LightsManager::OnCreate(VulkanRenderer* vRenderer)
 
 void LightsManager::OnDestroy()
 {
+    lightMeshes.clear();
+    LightTransforms.clear();
+    
     Actor::OnDestroy();
+}
+
+void LightsManager::render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo)
+{
+    if (renderMeshes)
+    {
+        for (auto& [key, transform] : getLightTransforms())
+        {
+            if (!transform) continue;
+            vRenderer->SetPushConstant(pipelineInfo, transform->GetTransformMatrix());
+            auto meshIt = lightMeshes.find(key);
+            if (meshIt != lightMeshes.end() && meshIt->second)
+            {
+                vRenderer->BindMesh(*meshIt->second);
+                vRenderer->DrawIndexed(*meshIt->second);
+            }
+        }
+    }
 }

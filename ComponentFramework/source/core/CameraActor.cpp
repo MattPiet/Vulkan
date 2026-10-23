@@ -19,9 +19,6 @@ CameraActor::~CameraActor() {
 
 bool CameraActor::OnCreate(VulkanRenderer* vRenderer)
 {
-	// This'll stop us from creating something twice and generating memory leaks
-	// This will save us sweating when the code gets even more complicated
-
 	if (vRenderer)
 	{
 		
@@ -38,7 +35,7 @@ bool CameraActor::OnCreate(VulkanRenderer* vRenderer)
 		
 		// this is the DescriptorSetInfo for the skybox, which is a cube map texture
 		DescriptorSetBuilder skyboxDescriptorBuilder(vRenderer->getDevice());
-		skyboxDescriptorBuilder.add(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, GetComponent<SamplerCube>().get());
+		skyboxDescriptorBuilder.add(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, GetComponent<SamplerCube>().get());
 		*GetComponent<DescriptorSetInfo>() = skyboxDescriptorBuilder.BuildDescriptorSet(vRenderer->getNumSwapchains());
 		
 		// This is the start of the camera info
@@ -243,6 +240,14 @@ void CameraActor::UpdateFrustum()
 FrustumCollision CameraActor::CheckFrustum(Matrix4 modelMatrix)
 {
 	Vec3 position(modelMatrix[12], modelMatrix[13], modelMatrix[14]);
+	float scaleXSq = modelMatrix[0] * modelMatrix[0] + modelMatrix[1] * modelMatrix[1] + modelMatrix[2] * modelMatrix[2];
+	float scaleYSq = modelMatrix[4] * modelMatrix[4] + modelMatrix[5] * modelMatrix[5] + modelMatrix[6] * modelMatrix[6];
+	float scaleZSq = modelMatrix[8] * modelMatrix[8] + modelMatrix[9] * modelMatrix[9] + modelMatrix[10] * modelMatrix[10];
+
+	// Get the maximum scale across all axes
+	float maxScale = std::sqrt(std::max({scaleXSq, scaleYSq, scaleZSq}));
+
+	cullRadius = maxScale + 5;
 	
 	if (MATHEX::PMath::distance(position, frustum.front_plane) < -cullRadius) {
 		return FrustumCollision::CULLED_NEAR; 
@@ -263,6 +268,15 @@ FrustumCollision CameraActor::CheckFrustum(Matrix4 modelMatrix)
 		return FrustumCollision::CULLED_TOP;
 	}
 	return FrustumCollision::INSIDE;
+}
+
+void CameraActor::render(VulkanRenderer* vRenderer)
+{
+	vRenderer->BindPipeline(GetSkyboxPipelineInfo().pipeline);
+	vRenderer->BindDescriptorSet(GetSkyboxPipelineInfo().pipelineLayout, 0, GetCameraUBODescriptorSetInfo().descriptorSet); // Set 0: Camera UBO
+	vRenderer->BindDescriptorSet(GetSkyboxPipelineInfo().pipelineLayout, 1, GetComponent<DescriptorSetInfo>()->descriptorSet); // Set 1: Cubemap Texture
+	vRenderer->BindMesh(*GetComponent<IndexedVertexBuffer>());
+	vRenderer->DrawIndexed(*GetComponent<IndexedVertexBuffer>());
 }
 
 

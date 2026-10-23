@@ -8,9 +8,12 @@
 	  </Mesh>
 	  <Mesh name="CubeMesh" filename="meshes/Cube.obj">
 	  </Mesh>
+	  <Mesh name="RookMesh" filename="meshes/Rook.obj">
+	  </Mesh>
 	  <!--Setting up materials-->
 	  <Material name="MarioMaterial" filename="./textures/mario_fire.png"/>
 	  <Material name="MarioMimeMaterial" filename="./textures/mario_mime.png"/>
+	  <Material name="RookMaterial" filename="./textures/White Chess Base Colour.png"/>
 	  <SkyboxMaterial name="SkyboxMaterial"
 	                  posx="./textures/StarSkyboxPosx.png"
 	                  negx="./textures/StarSkyboxNegx.png"
@@ -41,6 +44,15 @@
 		  <Mesh name="MarioMimeMesh"/>
 		  <Shader name ="Shader"/>
 		  <Material name ="MarioMimeMaterial"/>
+	  </Actor>
+
+	  <Actor actorname="Rook" parent="none">
+		  <Transform posx="1.0" posy="-9.0" posz="0.0"
+		             angleDeg="0.0" axisx="0.0" axisy="1.0" axisz="0.0"
+		             scalex="1.0" scaley="1.0" scalez="1.0"/>
+		  <Mesh name="RookMesh"/>
+		  <Shader name ="Shader"/>
+		  <Material name ="RookMaterial"/>
 	  </Actor>
 
 	  <CameraActor actorname="Camera" parent="none">
