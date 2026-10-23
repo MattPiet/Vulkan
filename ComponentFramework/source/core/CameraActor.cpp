@@ -60,7 +60,13 @@ void CameraActor::CreateSkyboxPipeline(VulkanRenderer* vRenderer)
 		CameraUBOinfo.descriptorSetLayout, 
 		GetComponent<DescriptorSetInfo>()->descriptorSetLayout 
 	 };
-	skyboxPipelineInfo = vRenderer->CreateSkyboxPipeline(skyboxLayouts, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv");
+	if (vRenderer->IsDLSSActive()) {
+		skyboxPipelineInfo = vRenderer->CreateSkyboxPipeline(
+			skyboxLayouts, "shaders/skybox_dlss.vert.spv", "shaders/skybox_dlss.frag.spv");
+	} else {
+		skyboxPipelineInfo = vRenderer->CreateSkyboxPipeline(
+			skyboxLayouts, "shaders/skybox.vert.spv", "shaders/skybox.frag.spv");
+	}
 }
 void CameraActor::UpdateProjectionMatrix(const float fovy, const float aspectRatio, const float near, const float far)
 {

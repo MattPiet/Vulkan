@@ -1,6 +1,8 @@
-﻿#ifndef LIGHTS_MANAGER_H
+#ifndef LIGHTS_MANAGER_H
 #define LIGHTS_MANAGER_H
 #include <core/Actor.h>
+#include <unordered_map>
+#include <string>
 
 #include "CoreStructs.h"
 #include "physics/TransformComponent.h"
@@ -12,6 +14,7 @@ class LightsManager : public Actor
     std::vector<BufferMemory> LightsUBO;
     LightsData lights;
     std::unordered_map<std::string, TransformComponent*> LightTransforms;
+    std::unordered_map<std::string, Matrix4> previousRenderModelMatrices_;
     
 public:
     std::unordered_map<std::string, IndexedVertexBuffer*> lightMeshes;
@@ -30,6 +33,7 @@ public:
     }
     std::unordered_map<std::string, TransformComponent*> getLightTransforms() const { return LightTransforms; }
     void render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo);
+    void ResetMotionHistory() { previousRenderModelMatrices_.clear(); }
     
     /*DescriptorSetInfo GetLightsUBODescriptorSetInfo() const { return LightsUBOinfo; }
     DescriptorSetInfo& GetLightsUBODescriptorSetInfoRef() { return LightsUBOinfo; }

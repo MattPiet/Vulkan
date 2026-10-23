@@ -99,7 +99,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>C:\GameDev\OpenGL\lib\x64;C:\GameDev\SDL3\lib\x64;C:\GameDev\Vulkan\lib64;$(ProjectDir)Upscaling\NVIDIA\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;glew32.lib;glew32s.lib;opengl32.lib;vulkan-1.lib;sl.interposer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;glew32.lib;glew32s.lib;opengl32.lib;sl.interposer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y /d "$(ProjectDir)Upscaling\NVIDIA\dll\*.dll" "$(OutDir)"</Command>
@@ -1326,8 +1326,12 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="CmakeLists.txt" />
+    <Content Include="shaders\multiPhong_dlss.frag" />
+    <Content Include="shaders\multiPhong_dlss.vert" />
     <Content Include="shaders\skybox.frag" />
     <Content Include="shaders\skybox.vert" />
+    <Content Include="shaders\skybox_dlss.frag" />
+    <Content Include="shaders\skybox_dlss.vert" />
     <Content Include="XMLFiles\Scene0.xml" />
   </ItemGroup>
   <ItemGroup>

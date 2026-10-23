@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "render/VulkanRenderer.h"
 
 PipelineInfo VulkanRenderer::CreateGraphicsPipeline(VkDescriptorSetLayout descriptorSetLayout, const char* vertFile, const char* fragFile,
@@ -92,17 +93,18 @@ PipelineInfo VulkanRenderer::CreateGraphicsPipeline(VkDescriptorSetLayout descri
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
+    const VkExtent2D pipelineExtent = GetSceneRenderExtent();
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapChainExtent.width);
-    viewport.height = static_cast<float>(swapChainExtent.height);
+    viewport.width = static_cast<float>(pipelineExtent.width);
+    viewport.height = static_cast<float>(pipelineExtent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = { 0, 0 };
-    scissor.extent = swapChainExtent;
+    scissor.extent = pipelineExtent;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -134,16 +136,21 @@ PipelineInfo VulkanRenderer::CreateGraphicsPipeline(VkDescriptorSetLayout descri
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
+    std::array<VkPipelineColorBlendAttachmentState, 2> colorBlendAttachments{};
+    for (auto& attachment : colorBlendAttachments) {
+        attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        attachment.blendEnable = VK_FALSE;
+    }
+    // The second attachment is RG16F motion data (R/G only).
+    colorBlendAttachments[1].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT;
 
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.logicOpEnable = VK_FALSE;
     colorBlending.logicOp = VK_LOGIC_OP_COPY;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.attachmentCount = (upscaler_ == DLSS) ? 2u : 1u;
+    colorBlending.pAttachments = colorBlendAttachments.data();
     colorBlending.blendConstants[0] = 0.0f;
     colorBlending.blendConstants[1] = 0.0f;
     colorBlending.blendConstants[2] = 0.0f;
@@ -152,7 +159,9 @@ PipelineInfo VulkanRenderer::CreateGraphicsPipeline(VkDescriptorSetLayout descri
     VkPushConstantRange range{};
     range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     range.offset = 0;
-    range.size = sizeof(ModelMatrixPushConst);
+    range.size = (upscaler_ == DLSS)
+        ? static_cast<uint32_t>(sizeof(ModelMatrixPushConst))
+        : static_cast<uint32_t>(offsetof(ModelMatrixPushConst, previousModelMatrix));
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -287,17 +296,18 @@ PipelineInfo VulkanRenderer::CreateGraphicsPipeline(const std::vector<VkDescript
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
+    const VkExtent2D pipelineExtent = GetSceneRenderExtent();
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapChainExtent.width);
-    viewport.height = static_cast<float>(swapChainExtent.height);
+    viewport.width = static_cast<float>(pipelineExtent.width);
+    viewport.height = static_cast<float>(pipelineExtent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = { 0, 0 };
-    scissor.extent = swapChainExtent;
+    scissor.extent = pipelineExtent;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -329,16 +339,21 @@ PipelineInfo VulkanRenderer::CreateGraphicsPipeline(const std::vector<VkDescript
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
+    std::array<VkPipelineColorBlendAttachmentState, 2> colorBlendAttachments{};
+    for (auto& attachment : colorBlendAttachments) {
+        attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        attachment.blendEnable = VK_FALSE;
+    }
+    // The second attachment is RG16F motion data (R/G only).
+    colorBlendAttachments[1].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT;
 
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.logicOpEnable = VK_FALSE;
     colorBlending.logicOp = VK_LOGIC_OP_COPY;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.attachmentCount = (upscaler_ == DLSS) ? 2u : 1u;
+    colorBlending.pAttachments = colorBlendAttachments.data();
     colorBlending.blendConstants[0] = 0.0f;
     colorBlending.blendConstants[1] = 0.0f;
     colorBlending.blendConstants[2] = 0.0f;
@@ -347,7 +362,9 @@ PipelineInfo VulkanRenderer::CreateGraphicsPipeline(const std::vector<VkDescript
     VkPushConstantRange range{};
     range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     range.offset = 0;
-    range.size = sizeof(ModelMatrixPushConst);
+    range.size = (upscaler_ == DLSS)
+        ? static_cast<uint32_t>(sizeof(ModelMatrixPushConst))
+        : static_cast<uint32_t>(offsetof(ModelMatrixPushConst, previousModelMatrix));
 
     // I changed this to allow for multiple Descriptor set Layouts in one Pipeline, why so that I only bind things once 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -429,17 +446,18 @@ PipelineInfo VulkanRenderer::CreateSkyboxPipeline(const std::vector<VkDescriptor
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
+    const VkExtent2D pipelineExtent = GetSceneRenderExtent();
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapChainExtent.width);
-    viewport.height = static_cast<float>(swapChainExtent.height);
+    viewport.width = static_cast<float>(pipelineExtent.width);
+    viewport.height = static_cast<float>(pipelineExtent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = { 0, 0 };
-    scissor.extent = swapChainExtent;
+    scissor.extent = pipelineExtent;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -477,16 +495,21 @@ PipelineInfo VulkanRenderer::CreateSkyboxPipeline(const std::vector<VkDescriptor
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
+    std::array<VkPipelineColorBlendAttachmentState, 2> colorBlendAttachments{};
+    for (auto& attachment : colorBlendAttachments) {
+        attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        attachment.blendEnable = VK_FALSE;
+    }
+    // The second attachment is RG16F motion data (R/G only).
+    colorBlendAttachments[1].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT;
 
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.logicOpEnable = VK_FALSE;
     colorBlending.logicOp = VK_LOGIC_OP_COPY;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.attachmentCount = (upscaler_ == DLSS) ? 2u : 1u;
+    colorBlending.pAttachments = colorBlendAttachments.data();
     colorBlending.blendConstants[0] = 0.0f;
     colorBlending.blendConstants[1] = 0.0f;
     colorBlending.blendConstants[2] = 0.0f;

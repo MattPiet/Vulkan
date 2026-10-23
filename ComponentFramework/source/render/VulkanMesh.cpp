@@ -243,18 +243,23 @@ void VulkanRenderer::CreateIndexBuffer(IndexedVertexBuffer& indexedBufferMemory,
 }
 
 void VulkanRenderer::BindMesh(IndexedVertexBuffer mesh) {
+    const VkCommandBuffer commandBuffer = GetActiveCommandBuffer();
+    if (commandBuffer == VK_NULL_HANDLE) {
+        throw std::logic_error("BindMesh called outside active command-buffer recording.");
+    }
+
     VkBuffer vertexBuffers[] = { mesh.vertBufferID };
     VkDeviceSize offsets[] = { 0 };
-    for (uint32_t i = 0; i < getNumSwapchains(); i++) {
-        vkCmdBindVertexBuffers(primaryCommandBuffer.commandBuffers[i], 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(primaryCommandBuffer.commandBuffers[i], mesh.indexBufferID, 0, VK_INDEX_TYPE_UINT32);
-    }
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, mesh.indexBufferID, 0, VK_INDEX_TYPE_UINT32);
 }
 
 void VulkanRenderer::DrawIndexed(IndexedVertexBuffer mesh) {
-    for (uint32_t i = 0; i < numSwapchains; i++) {
-        vkCmdDrawIndexed(primaryCommandBuffer.commandBuffers[i], static_cast<uint32_t>(mesh.indexBufferLength), 1, 0, 0, 0);
+    const VkCommandBuffer commandBuffer = GetActiveCommandBuffer();
+    if (commandBuffer == VK_NULL_HANDLE) {
+        throw std::logic_error("DrawIndexed called outside active command-buffer recording.");
     }
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.indexBufferLength), 1, 0, 0, 0);
 }
 
 void VulkanRenderer::DestroyIndexedMesh(IndexedVertexBuffer mesh){

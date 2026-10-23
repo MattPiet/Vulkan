@@ -57,9 +57,12 @@ struct IndexedVertexBuffer : Component {
     virtual void Render() const override{}
 };
 
-struct CameraData { 
+struct CameraData {
     Matrix4 projectionMatrix;
     Matrix4 viewMatrix;
+    // Previous rendered frame's camera matrices, used only by DLSS shader variants.
+    Matrix4 previousProjectionMatrix;
+    Matrix4 previousViewMatrix;
 };
 
 #define MAX_LIGHTS 4 
@@ -84,7 +87,9 @@ struct LightsData {
 struct ModelMatrixPushConst {
     Matrix4 modelMatrix;
     Vec4 normalMatrix[3];
-    Vec4 pad;/// padding for right now
+    Vec4 pad;
+    // Previous rendered model transform, used by the DLSS motion-vector shader.
+    Matrix4 previousModelMatrix;
 };
 
 

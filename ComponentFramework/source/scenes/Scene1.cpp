@@ -20,6 +20,7 @@ Scene1::~Scene1() {
 }
 
 bool Scene1::OnCreate() {
+	previousModelMatrices_.clear();
 	MonitorTimingStart("Scene1 OnCreate");
 	int width = 0, height = 0;
 	float aspectRatio;
@@ -29,7 +30,8 @@ bool Scene1::OnCreate() {
 	{
 		VulkanRenderer* vRenderer;
 		vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-			
+		vRenderer->ResetDLSSMotionHistory();
+
 			assetManager = std::make_shared<XMLAssetManager>();
 			std::vector<std::string> names{ 
 				"MarioFire",
@@ -62,7 +64,10 @@ bool Scene1::OnCreate() {
 				lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,
 				ActorList.begin()->second->GetComponent<DescriptorSetInfo>()->descriptorSetLayout
 			};
-			pipelineInfo = vRenderer->CreateGraphicsPipeline(pipelineLayouts, "shaders/multiPhong.vert.spv", "shaders/multiPhong.frag.spv");
+			pipelineInfo = vRenderer->CreateGraphicsPipeline(
+				pipelineLayouts,
+				vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.vert.spv" : "shaders/multiPhong.vert.spv",
+				vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.frag.spv" : "shaders/multiPhong.frag.spv");
 			
 			scene_number = 0;
 		}
@@ -76,65 +81,70 @@ bool Scene1::OnCreate() {
 }
 
 void Scene1::HandleEvents(const SDL_Event& sdlEvent) {
-	camera_actor_->SetQuat(sdlEvent);
-		switch (sdlEvent.type) {
-			
-		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-			printf("size changed %d %d\n", sdlEvent.window.data1, sdlEvent.window.data2);
-			float aspectRatio = static_cast<float>(sdlEvent.window.data1) / static_cast<float>(sdlEvent.window.data2);
-			camera_actor_->UpdateProjectionMatrix(45.0f, aspectRatio, 0.5f, 100.0f);
-			if (renderer->getRendererType() == RendererType::VULKAN)
-			{
-				VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-				vRenderer->RecreateSwapChain();
-				vRenderer->DestroyPipeline(pipelineInfo);
-				vRenderer->DestroyPipeline(camera_actor_->GetSkyboxPipelineInfo());
-				std::vector<VkDescriptorSetLayout> pipelineLayouts = {
-					camera_actor_->GetCameraUBODescriptorSetInfo().descriptorSetLayout, 
-					lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,
-					ActorList.begin()->second->GetComponent<DescriptorSetInfo>()->descriptorSetLayout
-				};
-				pipelineInfo = vRenderer->CreateGraphicsPipeline(
-					pipelineLayouts, 
-					"shaders/multiPhong.vert.spv", 
-					"shaders/multiPhong.frag.spv"
-				);
-				camera_actor_->CreateSkyboxPipeline(vRenderer);
-				
-			}
-			break;
-		}
-	
+	if (camera_actor_) camera_actor_->SetQuat(sdlEvent);
+
+    switch (sdlEvent.type) {
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+        printf("size changed %d %d\n", sdlEvent.window.data1, sdlEvent.window.data2);
+        const float aspectRatio = static_cast<float>(sdlEvent.window.data1) /
+            static_cast<float>(std::max(1, sdlEvent.window.data2));
+        camera_actor_->UpdateProjectionMatrix(45.0f, aspectRatio, 0.5f, 100.0f);
+        if (renderer->getRendererType() == RendererType::VULKAN) {
+            auto* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+            if (vRenderer->IsDLSSActive()) {
+                vRenderer->UpdateUniformBuffer<CameraData>(
+                    camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
+            }
+            previousModelMatrices_.clear();
+            lightsManager->ResetMotionHistory();
+            vRenderer->RecreateSwapChain();
+            vRenderer->DestroyPipeline(pipelineInfo);
+            vRenderer->DestroyPipeline(camera_actor_->GetSkyboxPipelineInfo());
+            std::vector<VkDescriptorSetLayout> pipelineLayouts = {
+                camera_actor_->GetCameraUBODescriptorSetInfo().descriptorSetLayout,
+                lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,
+                ActorList.begin()->second->GetComponent<DescriptorSetInfo>()->descriptorSetLayout
+            };
+            pipelineInfo = vRenderer->CreateGraphicsPipeline(
+                pipelineLayouts,
+                vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.vert.spv" : "shaders/multiPhong.vert.spv",
+                vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.frag.spv" : "shaders/multiPhong.frag.spv");
+            camera_actor_->CreateSkyboxPipeline(vRenderer);
+        }
+        break;
+    }
+    default:
+        break;
+    }
 }
 void Scene1::Update(const float deltaTime) {
-	
-	if (renderer->getRendererType() == RendererType::VULKAN)
-	{
-		VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-		camera_actor_->CameraMovement(deltaTime, nullptr);
-		vRenderer->UpdateUniformBuffer<CameraData>(camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
 
-		LightsData viewSpaceLights = lightsManager->GetLightsData(); 
-		for (int i = 0; i < viewSpaceLights.numLights; i++)
-		{
-			Vec4 worldPosition = viewSpaceLights.pos[i]; 
-			viewSpaceLights.pos[i] = camera_actor_->GetViewMatrix() * worldPosition; 
-		}
-		vRenderer->UpdateUniformBuffer<LightsData>(viewSpaceLights, lightsManager->GetLightsUBO());
-		
-	}
-	elapsedTime += deltaTime;
-	ActorList.at("MarioFire")->GetComponent<TransformComponent>()->SetOrientation
-	(QMath::angleAxisRotation(elapsedTime * 90.0f, Vec3(0.0f, 1.0f, 0.0f))) ;
-	ActorList.at("MarioMime")->GetComponent<TransformComponent>()->SetOrientation
-	(QMath::angleAxisRotation(elapsedTime * 90.0f, Vec3(1.0f, 0.0f, 0.0f))) ;
-	
-	if (elapsedTime >= 5.0f && !hasLoaded)
-	{
-		scene_number = 0;
-		loadStagedScene = true;
-		hasLoaded = true; // Lock it out from firing again
-	}
+    if (renderer->getRendererType() == RendererType::VULKAN)
+    {
+        VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+        camera_actor_->CameraMovement(deltaTime, nullptr);
+        vRenderer->UpdateUniformBuffer<CameraData>(camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
+
+        LightsData viewSpaceLights = lightsManager->GetLightsData();
+        for (int i = 0; i < viewSpaceLights.numLights; i++)
+        {
+            Vec4 worldPosition = viewSpaceLights.pos[i];
+            viewSpaceLights.pos[i] = camera_actor_->GetViewMatrix() * worldPosition;
+        }
+        vRenderer->UpdateUniformBuffer<LightsData>(viewSpaceLights, lightsManager->GetLightsUBO());
+    }
+    elapsedTime += deltaTime;
+    ActorList.at("MarioFire")->GetComponent<TransformComponent>()->SetOrientation
+        (QMath::angleAxisRotation(elapsedTime * 90.0f, Vec3(0.0f, 1.0f, 0.0f)));
+    ActorList.at("MarioMime")->GetComponent<TransformComponent>()->SetOrientation
+        (QMath::angleAxisRotation(elapsedTime * 90.0f, Vec3(1.0f, 0.0f, 0.0f)));
+
+    if (elapsedTime >= 5.0f && !hasLoaded)
+    {
+        scene_number = 0;
+        loadStagedScene = true;
+        hasLoaded = true;
+    }
 }
 
 void Scene1::Render() const {
@@ -143,7 +153,18 @@ void Scene1::Render() const {
 		case RendererType::VULKAN:
 			{
 				VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+
 				std::lock_guard<std::mutex> lock(vulkanMutex);
+				if (vRenderer->IsDLSSActive()) {
+					vRenderer->SetDLSSCameraMatrices(
+						camera_actor_->GetProjectionMatrix(),
+						camera_actor_->GetViewMatrix());
+					CameraData frameCameraData = camera_actor_->GetCameraData();
+					frameCameraData.previousProjectionMatrix = vRenderer->GetPreviousDLSSProjectionForFrame();
+					frameCameraData.previousViewMatrix = vRenderer->GetPreviousDLSSViewForFrame();
+					vRenderer->UpdateUniformBuffer<CameraData>(
+						frameCameraData, camera_actor_->GetCameraUBO());
+				}
 				vRenderer->RecordCommandBuffers(Recording::START);
 				
 				vRenderer->BindPipeline(camera_actor_->GetSkyboxPipelineInfo().pipeline);
@@ -159,7 +180,11 @@ void Scene1::Render() const {
 				vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 1, lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSet);
 				
 				for (const auto& [name, actor] : ActorList) {
-					switch (camera_actor_->CheckFrustum(actor->GetModelMatrix()) ) { 
+					const Matrix4 currentModel = actor->GetModelMatrix();
+					const auto previousIt = previousModelMatrices_.find(name);
+					const Matrix4 previousModel = (previousIt == previousModelMatrices_.end())
+						? currentModel : previousIt->second;
+					switch (camera_actor_->CheckFrustum(currentModel) ) { 
 					case FrustumCollision::CULLED_NEAR:
 						std::cout << name << ": Clipped through Near Plane" << std::endl;
 						break;
@@ -182,13 +207,16 @@ void Scene1::Render() const {
 						// bind mr mario
 						vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 2, actor->GetComponent<DescriptorSetInfo>()->descriptorSet); 
 						// set push constant
-						vRenderer->SetPushConstant(pipelineInfo, actor->GetModelMatrix());
+						vRenderer->SetPushConstant(pipelineInfo, currentModel, &previousModel);
 						// bind his mesh
 						vRenderer->BindMesh(*actor->GetComponent<IndexedVertexBuffer>());
 						// give him pants
 						vRenderer->DrawIndexed(*actor->GetComponent<IndexedVertexBuffer>());
 						break;
 					}
+				}
+				for (const auto& [name, actor] : ActorList) {
+					previousModelMatrices_[name] = actor->GetModelMatrix();
 				}
 				// draw
 				vRenderer->RecordCommandBuffers(Recording::STOP);
@@ -213,6 +241,7 @@ void Scene1::Render() const {
 
 
 void Scene1::OnDestroy() {
+	previousModelMatrices_.clear();
 VulkanRenderer* vRenderer;
     vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
     if(vRenderer){

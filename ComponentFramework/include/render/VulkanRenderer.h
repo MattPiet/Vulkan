@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <array>
 #include <queue>
+#include <memory>
 
 #include "core/CoreStructs.h"
 #include "Renderer.h"
@@ -126,8 +127,15 @@ enum Recording {
 
 enum Upscaler
 {
-    DLSS,
-    FSR
+    NONE = 0,
+    DLSS = 1,
+    FSR = 2
+};
+
+struct DLSSRenderTargetImage {
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
 };
 
 
@@ -139,7 +147,25 @@ class VulkanRenderer : public Renderer {
     VulkanRenderer& operator=(VulkanRenderer&&) = delete;      /// Move operator
 
     std::unique_ptr<DLSSManager> dlss_manager;
-    Upscaler upscaler_;
+    bool streamlineInitialized = false;
+    Upscaler upscaler_ = NONE;
+    DLSSFrameParams dlssFrameParams{};
+    uint32_t dlssFrameIndex = 0;
+    bool dlssFrameConstantsReady = false;
+    bool hasPreviousDLSSViewProjection = false;
+    Matrix4 lastDLSSProjection{};
+    Matrix4 lastDLSSView{};
+    Matrix4 previousDLSSProjectionForFrame{};
+    Matrix4 previousDLSSViewForFrame{};
+    VkExtent2D sceneRenderExtent{};
+    static constexpr VkFormat DLSS_COLOR_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
+    static constexpr VkFormat DLSS_MOTION_FORMAT = VK_FORMAT_R16G16_SFLOAT;
+    static constexpr VkFormat DLSS_OUTPUT_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
+    std::vector<DLSSImageBinding> dlssColorTargets;
+    std::vector<DLSSImageBinding> dlssDepthTargets;
+    std::vector<DLSSImageBinding> dlssMotionTargets;
+    std::vector<DLSSImageBinding> dlssOutputTargets;
+    std::vector<VkFramebuffer> dlssSceneFramebuffers;
 public: /// Member functions
     VulkanRenderer();
     ~VulkanRenderer();
@@ -150,6 +176,19 @@ public: /// Member functions
     void OnDestroy();
     void Render();
     void RecreateSwapChain();
+
+    bool IsDLSSActive() const {
+        return upscaler_ == DLSS && dlss_manager && dlss_manager->IsDLSSSupported();
+    }
+    Upscaler GetUpscaler() const { return upscaler_; }
+    VkExtent2D GetSceneRenderExtent() const {
+        return (sceneRenderExtent.width > 0 && sceneRenderExtent.height > 0)
+            ? sceneRenderExtent : swapChainExtent;
+    }
+    void SetDLSSCameraMatrices(const Matrix4& projection, const Matrix4& view);
+    const Matrix4& GetPreviousDLSSProjectionForFrame() const { return previousDLSSProjectionForFrame; }
+    const Matrix4& GetPreviousDLSSViewForFrame() const { return previousDLSSViewForFrame; }
+    void ResetDLSSMotionHistory() { hasPreviousDLSSViewProjection = false; }
 
   
 
@@ -210,13 +249,21 @@ public:
     void CreateCommandBuffers();
     void DestroyCommandBuffers();
     void RecordCommandBuffers(Recording start_stop);
-    void SetPushConstant(const PipelineInfo pipelineInfo, const Matrix4& modelMatrix_);
+    void SetPushConstant(const PipelineInfo pipelineInfo, const Matrix4& modelMatrix_,
+                         const Matrix4* previousModelMatrix = nullptr);
     
     /// Some inlined getter and setters 
     SDL_Window* getWindow() { return window; }
     VkDevice getDevice() { return device; }
     VkPhysicalDevice getPhysicalDevice() const { return physicalDevice; }
     uint32_t getNumSwapchains() { return numSwapchains; }
+    uint32_t GetAcquiredImageIndex() const { return acquiredImageIndex; }
+    VkCommandBuffer GetActiveCommandBuffer() const {
+        if (!frameAcquired || acquiredImageIndex >= primaryCommandBuffer.commandBuffers.size()) {
+            return VK_NULL_HANDLE;
+        }
+        return primaryCommandBuffer.commandBuffers[acquiredImageIndex];
+    }
    
 
     template<class T>
@@ -252,6 +299,8 @@ private: /// Private member variables
     const uint32_t MAX_FRAMES_IN_FLIGHT;
     uint32_t numSwapchains;
     uint32_t currentFrame;
+    uint32_t acquiredImageIndex = 0;
+    bool frameAcquired = false;
     SDL_Event sdlEvent;
     uint32_t windowWidth;
     uint32_t windowHeight;
@@ -302,6 +351,10 @@ private:
     void createRenderPass();
     void createFramebuffers();
     void createDepthResources();
+    bool createDLSSRenderTargets();
+    void destroyDLSSRenderTargets();
+    bool checkDLSSFormatSupport() const;
+    void disableDLSS(const char* reason);
    
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);

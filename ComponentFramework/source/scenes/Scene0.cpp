@@ -20,6 +20,7 @@ Scene0::~Scene0() {
 }
 
 bool Scene0::OnCreate() {
+	previousModelMatrices_.clear();
 	MonitorTimingStart("Scene0 OnCreate");
 	int width = 0, height = 0;
 	float aspectRatio;
@@ -28,6 +29,7 @@ bool Scene0::OnCreate() {
 	case RendererType::VULKAN:
 	{
 		VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+		vRenderer->ResetDLSSMotionHistory();
 			
 			assetManager = std::make_shared<XMLAssetManager>();
 			std::vector<std::string> names{ 
@@ -39,6 +41,12 @@ bool Scene0::OnCreate() {
 			std::scoped_lock lock(vulkanMutex);
 			camera_actor_ = std::dynamic_pointer_cast<CameraActor>(assetManager->xmlAssets.find("Camera")->second);
 			camera_actor_->OnCreate(vRenderer);
+			if (vRenderer->IsDLSSActive()) {
+				// Initialize the camera data used by the DLSS motion-vector pass.
+				camera_actor_->UpdateViewMatrix();
+				vRenderer->UpdateUniformBuffer<CameraData>(
+					camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
+			}
 			
 			lightsManager = std::make_shared<LightsManager>(std::weak_ptr<Component>());
 			lightsManager->AddComponent(std::make_shared<DescriptorSetInfo>());
@@ -60,7 +68,10 @@ bool Scene0::OnCreate() {
 				lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSetLayout,
 				ActorList.begin()->second->GetComponent<DescriptorSetInfo>()->descriptorSetLayout
 			};
-			pipelineInfo = vRenderer->CreateGraphicsPipeline(pipelineLayouts, "shaders/multiPhong.vert.spv", "shaders/multiPhong.frag.spv");
+			pipelineInfo = vRenderer->CreateGraphicsPipeline(
+				pipelineLayouts,
+				vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.vert.spv" : "shaders/multiPhong.vert.spv",
+				vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.frag.spv" : "shaders/multiPhong.frag.spv");
 			
 			scene_number = 1;
 		}
@@ -74,7 +85,7 @@ bool Scene0::OnCreate() {
 }
 
 void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
-	camera_actor_->SetQuat(sdlEvent);
+	if (camera_actor_) camera_actor_->SetQuat(sdlEvent);
 		switch (sdlEvent.type) {
 			
 		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -84,6 +95,13 @@ void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
 			if (renderer->getRendererType() == RendererType::VULKAN)
 			{
 				VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+				previousModelMatrices_.clear();
+				lightsManager->ResetMotionHistory();
+			vRenderer->ResetDLSSMotionHistory();
+				if (vRenderer->IsDLSSActive()) {
+					vRenderer->UpdateUniformBuffer<CameraData>(
+						camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
+				}
 				vRenderer->RecreateSwapChain();
 				vRenderer->DestroyPipeline(pipelineInfo);
 				vRenderer->DestroyPipeline(camera_actor_->GetSkyboxPipelineInfo());
@@ -93,9 +111,9 @@ void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
 					ActorList.begin()->second->GetComponent<DescriptorSetInfo>()->descriptorSetLayout
 				};
 				pipelineInfo = vRenderer->CreateGraphicsPipeline(
-					pipelineLayouts, 
-					"shaders/multiPhong.vert.spv", 
-					"shaders/multiPhong.frag.spv"
+					pipelineLayouts,
+					vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.vert.spv" : "shaders/multiPhong.vert.spv",
+					vRenderer->IsDLSSActive() ? "shaders/multiPhong_dlss.frag.spv" : "shaders/multiPhong.frag.spv"
 				);
 				camera_actor_->CreateSkyboxPipeline(vRenderer);
 			}
@@ -172,6 +190,16 @@ void Scene0::Render() const {
 			{
 				VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
 				std::scoped_lock lock(vulkanMutex);
+				if (vRenderer->IsDLSSActive()) {
+					vRenderer->SetDLSSCameraMatrices(
+						camera_actor_->GetProjectionMatrix(),
+						camera_actor_->GetViewMatrix());
+					CameraData frameCameraData = camera_actor_->GetCameraData();
+					frameCameraData.previousProjectionMatrix = vRenderer->GetPreviousDLSSProjectionForFrame();
+					frameCameraData.previousViewMatrix = vRenderer->GetPreviousDLSSViewForFrame();
+					vRenderer->UpdateUniformBuffer<CameraData>(
+						frameCameraData, camera_actor_->GetCameraUBO());
+				}
 				vRenderer->RecordCommandBuffers(Recording::START);
 				
 				camera_actor_->render(vRenderer);
@@ -182,7 +210,11 @@ void Scene0::Render() const {
 				vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 1, lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSet);
 				
 				for (const auto& [name, actor] : ActorList) {
-					switch (camera_actor_->CheckFrustum(actor->GetModelMatrix()) ) { 
+					const Matrix4 currentModel = actor->GetModelMatrix();
+					const auto previousIt = previousModelMatrices_.find(name);
+					const Matrix4 previousModel = (previousIt == previousModelMatrices_.end())
+						? currentModel : previousIt->second;
+					switch (camera_actor_->CheckFrustum(currentModel) ) { 
 					case FrustumCollision::CULLED_NEAR:
 						std::cout << name << ": Clipped through Near Plane\n";
 						break;
@@ -202,11 +234,27 @@ void Scene0::Render() const {
 						std::cout << name << ": Clipped through Bottom Plane\n";
 						break; 
 					default:
-						actor->render(vRenderer, pipelineInfo);
+						actor->render(vRenderer, pipelineInfo, &previousModel);
 						break;
 					}
 				}
-				lightsManager->render(vRenderer,pipelineInfo);
+				// LightsManager renders its meshes with the same multiPhong pipeline.
+				// That fragment shader statically samples descriptor set 2. If the camera
+				// culls every actor, no actor draw has bound set 2 this frame, so bind a
+				// valid actor material before drawing the light meshes.
+				if (!ActorList.empty()) {
+					auto materialInfo = ActorList.begin()->second->GetComponent<DescriptorSetInfo>();
+					if (materialInfo) {
+						vRenderer->BindDescriptorSet(
+							pipelineInfo.pipelineLayout,
+						2,
+						materialInfo->descriptorSet);
+						lightsManager->render(vRenderer, pipelineInfo);
+					}
+				}
+				for (const auto& [name, actor] : ActorList) {
+					previousModelMatrices_[name] = actor->GetModelMatrix();
+				}
 				// draw
 				vRenderer->RecordCommandBuffers(Recording::STOP);
 				vRenderer->Render();
@@ -230,6 +278,7 @@ void Scene0::Render() const {
 
 
 void Scene0::OnDestroy() {
+	previousModelMatrices_.clear();
 
 
     if(VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer)){

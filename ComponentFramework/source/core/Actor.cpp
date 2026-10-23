@@ -55,10 +55,12 @@ void Actor::Update(const float deltaTime) {
 
 void Actor::Render() const {}
 
-void Actor::render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo)
+void Actor::render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo,
+                   const MATH::Matrix4* previousModelMatrix)
 {
-    vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 2,GetComponent<DescriptorSetInfo>()->descriptorSet); 
-    vRenderer->SetPushConstant(pipelineInfo, GetModelMatrix());
+    vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 2, GetComponent<DescriptorSetInfo>()->descriptorSet);
+    const MATH::Matrix4 currentModelMatrix = GetModelMatrix();
+    vRenderer->SetPushConstant(pipelineInfo, currentModelMatrix, previousModelMatrix);
     vRenderer->BindMesh(*GetComponent<IndexedVertexBuffer>());
     vRenderer->DrawIndexed(*GetComponent<IndexedVertexBuffer>());
 }

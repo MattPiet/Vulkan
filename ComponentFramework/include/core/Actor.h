@@ -26,7 +26,8 @@ public:
     virtual void OnDestroy() override;
     virtual void Update(const float deltaTime) override;
     virtual void Render() const override;
-   void render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo);
+   void render(VulkanRenderer* vRenderer, PipelineInfo pipelineInfo,
+               const MATH::Matrix4* previousModelMatrix = nullptr);
 
     template<typename ComponentTemplate>
     void AddComponent(std::shared_ptr<ComponentTemplate> component_) {

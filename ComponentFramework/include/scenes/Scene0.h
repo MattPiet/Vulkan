@@ -30,6 +30,8 @@ private:
 	CommandBufferData commandBufferData;
 	std::shared_ptr<CameraActor> camera_actor_;
 	std::unordered_map<std::string, Ref<Actor>> ActorList;
+	// Previous model matrices from the last rendered frame, used for DLSS motion vectors.
+	mutable std::unordered_map<std::string, Matrix4> previousModelMatrices_;
 	Ref<XMLAssetManager> assetManager;
 	
 	float elapsedTime = 0.0f;
