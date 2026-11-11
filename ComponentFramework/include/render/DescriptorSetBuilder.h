@@ -79,6 +79,11 @@ public:
     /// Add SamplerCube descriptor
     DescriptorSetBuilder& add(uint32_t binding, VkDescriptorType descriptorType,
     VkShaderStageFlags stageFlags, uint32_t count, SamplerCube* cubeData);
+    
+    // Ray tracing
+    /// Add descriptor without immediate initial write data (e.g. Acceleration Structure / TLAS)
+    DescriptorSetBuilder& add(uint32_t binding, VkDescriptorType descriptorType,
+                VkShaderStageFlags stageFlags, uint32_t count = 1);
 
     DescriptorSetInfo BuildDescriptorSet(uint32_t numSwapChains_);
 

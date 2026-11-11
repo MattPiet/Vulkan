@@ -112,6 +112,7 @@ public:
     bool CheckAdapterSupport(VkPhysicalDevice physicalDevice);
     bool TagResources(VkCommandBuffer cmdBuffer, const DLSSResourceBindings& resources);
     bool EvaluateDLSS(VkCommandBuffer cmdBuffer);
+    sl::DLSSMode GetDLSSMode(DLSSQualityMode mode) const;
 
 private:
     VkDevice Device = VK_NULL_HANDLE;
@@ -121,5 +122,4 @@ private:
     bool hasLoggedSuccessfulEvaluation = false;
     sl::FrameToken* currentFrameToken = nullptr;
 
-    sl::DLSSMode GetDLSSMode(DLSSQualityMode mode) const;
 };

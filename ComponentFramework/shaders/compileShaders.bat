@@ -20,6 +20,6 @@ echo Compiling: %filename%
 rem if the old output file exists delete it. 
 if exist %output% ( del %output% )
 rem get the path to your install version of Vulkan
-glslc.exe -c "%filename%" -o "%output%"
+glslc.exe --target-env=vulkan1.2 -c "%filename%" -o "%output%"
 echo Created spv file: %output%
 pause

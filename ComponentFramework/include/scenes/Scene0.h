@@ -34,6 +34,13 @@ private:
 	mutable std::unordered_map<std::string, Matrix4> previousModelMatrices_;
 	Ref<XMLAssetManager> assetManager;
 	
+	// Ray Tracing TLAS Handles
+	mutable VkAccelerationStructureKHR sceneTLAS = VK_NULL_HANDLE;
+	mutable VkBuffer sceneTLASBuffer = VK_NULL_HANDLE;
+	mutable VkDeviceMemory sceneTLASMemory = VK_NULL_HANDLE;
+	mutable VkBuffer sceneInstanceBuffer = VK_NULL_HANDLE;
+	mutable VkDeviceMemory sceneInstanceMemory = VK_NULL_HANDLE;
+	
 	float elapsedTime = 0.0f;
 	bool hasLoaded = false;
 	bool hasSwapped = false;

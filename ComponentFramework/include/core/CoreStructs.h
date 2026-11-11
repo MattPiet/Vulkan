@@ -49,6 +49,11 @@ struct IndexedVertexBuffer : Component {
     VkDeviceMemory indexBufferMemoryID;
     VkDeviceSize indexBufferLength;
     
+    // Ray Tracing Acceleration Structure for this mesh
+    VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
+    VkBuffer blasBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory blasMemory = VK_NULL_HANDLE;
+    
     std::string filename;
     
     virtual bool OnCreate(VulkanRenderer* vRenderer) override{return true;}

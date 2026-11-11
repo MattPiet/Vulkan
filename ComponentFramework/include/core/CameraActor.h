@@ -25,7 +25,8 @@ enum class FrustumCollision {
 	CULLED_LEFT,
 	CULLED_RIGHT,
 	CULLED_BOTTOM,
-	CULLED_TOP
+	CULLED_TOP,
+	NONE
 };
 
 struct Frustum

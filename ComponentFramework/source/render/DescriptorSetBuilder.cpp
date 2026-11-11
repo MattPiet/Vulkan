@@ -69,6 +69,27 @@ DescriptorSetBuilder& DescriptorSetBuilder::add(uint32_t binding, VkDescriptorTy
         desciptorsData[binding] = singleDescriptorInfo; 
         return *this;  
     }
+    DescriptorSetBuilder& DescriptorSetBuilder::add(uint32_t binding, VkDescriptorType descriptorType,
+    VkShaderStageFlags stageFlags, uint32_t count) {
+
+        std::vector<BufferMemory> empty; 
+
+        SingleDescriptorInfoCollection singleDescriptorInfo{};
+        assert(desciptorsData.count(binding) == 0 && "That binding already in use");
+        singleDescriptorInfo.binding = binding;
+        singleDescriptorInfo.descriptorCount = count;
+        singleDescriptorInfo.descriptorType = descriptorType;
+        singleDescriptorInfo.pImmutableSamplers = nullptr;
+        singleDescriptorInfo.stageFlags = stageFlags;
+        singleDescriptorInfo.bufferMem = empty;
+        singleDescriptorInfo.pImageMem = nullptr;
+        singleDescriptorInfo.pCubeMem = nullptr;
+
+        singleDescriptorInfo.range = 0;
+        singleDescriptorInfo.offset = 0;
+        desciptorsData[binding] = singleDescriptorInfo; 
+        return *this;  
+    }
 
     DescriptorSetInfo DescriptorSetBuilder::BuildDescriptorSet(uint32_t numSwapChains_){
         numSwapChains = numSwapChains_;
@@ -162,80 +183,79 @@ DescriptorSetBuilder& DescriptorSetBuilder::add(uint32_t binding, VkDescriptorTy
 
     void DescriptorSetBuilder::populateDescriptorSet(){
 
-        std::vector<VkWriteDescriptorSet> descriptorWrites(numberOfDescriptors);
-        std::vector<VkDescriptorBufferInfo>bufferInfoList;
-        std::vector<VkDescriptorImageInfo>imageInfoList;
-      
-        /// Now populate the descriptorSet with the VRAM data handles
-        for(uint32_t i = 0; i < numSwapChains; i++){ /// Loop over the number of descriptor sets
-            for (auto &b : desciptorsData) { /// loop over the individual descriptors
-
-                if(b.second.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER){
-                    VkDescriptorBufferInfo bufferInfo{};
-                    bufferInfo.buffer = b.second.bufferMem[0].bufferID;
-                    bufferInfo.offset = b.second.offset; /// Better be zero
-                    bufferInfo.range = b.second.bufferMem[0].bufferMemoryLength;
-                    bufferInfoList.push_back(bufferInfo);
-
-                }else if (b.second.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER){
-                    VkDescriptorImageInfo imageInfo{};
-                    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                    
-                    if (b.second.pImageMem != nullptr) {
-                        imageInfo.imageView = b.second.pImageMem->imageView;
-                        imageInfo.sampler = b.second.pImageMem->sampler;
-                    } 
-                    else if (b.second.pCubeMem != nullptr) {
-                        imageInfo.imageView = b.second.pCubeMem->imageView;
-                        imageInfo.sampler = b.second.pCubeMem->sampler;
-                    } else {
-                        throw std::runtime_error("Both image pointers are null for a Combined Image Sampler!");
-                    }
-                    imageInfoList.push_back(imageInfo);
-                }
-            }
-
-            /// While looping over the desciptorsData map - keep track of which buffer data
-            /// set along with the image data sets
-            int bufferIndex = 0;
-            int imageIndex = 0;
-            int descriptorIndex = 0; 
-
-            for (auto &b : desciptorsData) { /// loop over the individual descriptors 
-                if(b.second.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER){
-                    descriptorWrites[descriptorIndex].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    descriptorWrites[descriptorIndex].dstSet = descriptorSet[i];/// Destination descriptor set
-                    descriptorWrites[descriptorIndex].dstBinding = b.second.binding;
-                    descriptorWrites[descriptorIndex].dstArrayElement = 0;
-                    descriptorWrites[descriptorIndex].descriptorType = b.second.descriptorType;
-                    descriptorWrites[descriptorIndex].descriptorCount = b.second.descriptorCount;
-
-                    descriptorWrites[descriptorIndex].pBufferInfo = &bufferInfoList[bufferIndex];
-                    descriptorIndex++;
-                    bufferIndex++;
-
-
-                }else if(b.second.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER){
-                    descriptorWrites[descriptorIndex].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                    descriptorWrites[descriptorIndex].dstSet = descriptorSet[i];/// Destination descriptor set
-                    descriptorWrites[descriptorIndex].dstBinding = b.second.binding;
-                    descriptorWrites[descriptorIndex].dstArrayElement = 0;
-                    descriptorWrites[descriptorIndex].descriptorType = b.second.descriptorType;
-                    descriptorWrites[descriptorIndex].descriptorCount = b.second.descriptorCount;
-
-                    descriptorWrites[descriptorIndex].pImageInfo = &imageInfoList[imageIndex];
-                    descriptorIndex++;  
-                    imageIndex++;
-                  
-                }
-            }
-            /// This updates the descriptor set specified in the dstSet field of the of the descriptorWrites structures. 
-            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr); 
-
-            /// Now, I'm about to start on the next descriptor set, so clear the data lists
-            bufferInfoList.clear();
-            imageInfoList.clear();
-        }
+       std::vector<VkWriteDescriptorSet> descriptorWrites;
+           std::vector<VkDescriptorBufferInfo> bufferInfoList;
+           std::vector<VkDescriptorImageInfo> imageInfoList;
+       
+           /// Loop over the number of descriptor sets (one per swapchain image)
+           for (uint32_t i = 0; i < numSwapChains; i++) {
+               bufferInfoList.clear();
+               imageInfoList.clear();
+               descriptorWrites.clear();
+       
+               /// 1. Build initial buffer and image info structs
+               for (auto &b : desciptorsData) {
+                   if (b.second.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+                       VkDescriptorBufferInfo bufferInfo{};
+                       bufferInfo.buffer = b.second.bufferMem[0].bufferID;
+                       bufferInfo.offset = b.second.offset;
+                       bufferInfo.range = b.second.bufferMem[0].bufferMemoryLength;
+                       bufferInfoList.push_back(bufferInfo);
+                   } 
+                   else if (b.second.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+                       VkDescriptorImageInfo imageInfo{};
+                       imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                       
+                       if (b.second.pImageMem != nullptr) {
+                           imageInfo.imageView = b.second.pImageMem->imageView;
+                           imageInfo.sampler = b.second.pImageMem->sampler;
+                       } 
+                       else if (b.second.pCubeMem != nullptr) {
+                           imageInfo.imageView = b.second.pCubeMem->imageView;
+                           imageInfo.sampler = b.second.pCubeMem->sampler;
+                       } else {
+                           throw std::runtime_error("Both image pointers are null for a Combined Image Sampler!");
+                       }
+                       imageInfoList.push_back(imageInfo);
+                   }
+               }
+       
+               /// Build writes ONLY for descriptors with static initial data
+               int bufferIndex = 0;
+               int imageIndex = 0;
+       
+               for (auto &b : desciptorsData) { 
+                   if (b.second.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+                       VkWriteDescriptorSet descriptorWrite{};
+                       descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                       descriptorWrite.dstSet = descriptorSet[i];
+                       descriptorWrite.dstBinding = b.second.binding;
+                       descriptorWrite.dstArrayElement = 0;
+                       descriptorWrite.descriptorType = b.second.descriptorType;
+                       descriptorWrite.descriptorCount = b.second.descriptorCount;
+                       descriptorWrite.pBufferInfo = &bufferInfoList[bufferIndex++];
+                       descriptorWrites.push_back(descriptorWrite);
+                   } 
+                   else if (b.second.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+                       VkWriteDescriptorSet descriptorWrite{};
+                       descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                       descriptorWrite.dstSet = descriptorSet[i];
+                       descriptorWrite.dstBinding = b.second.binding;
+                       descriptorWrite.dstArrayElement = 0;
+                       descriptorWrite.descriptorType = b.second.descriptorType;
+                       descriptorWrite.descriptorCount = b.second.descriptorCount;
+                       descriptorWrite.pImageInfo = &imageInfoList[imageIndex++];
+                       descriptorWrites.push_back(descriptorWrite);
+                   }
+                   // Bindings like VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR are skipped here
+                   // because they are updated dynamically in Scene0::Render() via UpdateAccelerationStructureDescriptor().
+               }
+       
+               /// 3. Submit valid descriptor writes
+               if (!descriptorWrites.empty()) {
+                   vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+               }
+           }
     }
     
 

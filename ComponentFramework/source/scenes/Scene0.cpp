@@ -200,6 +200,44 @@ void Scene0::Render() const {
 					vRenderer->UpdateUniformBuffer<CameraData>(
 						frameCameraData, camera_actor_->GetCameraUBO());
 				}
+				
+				std::vector<VkAccelerationStructureInstanceKHR> tlasInstances;
+				uint32_t instanceId = 0;
+
+				for (const auto& [name, actor] : ActorList) {
+					auto meshComponent = actor->GetComponent<IndexedVertexBuffer>();
+					if (!meshComponent || meshComponent->blas == VK_NULL_HANDLE) continue;
+
+					VkAccelerationStructureInstanceKHR instance{};
+					instance.transform = vRenderer->Matrix4ToVkTransformMatrixKHR(actor->GetModelMatrix());
+					instance.instanceCustomIndex = instanceId++;
+					instance.mask = 0xFF; // Visible to all rays
+					instance.instanceShaderBindingTableRecordOffset = 0;
+					instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+					instance.accelerationStructureReference = vRenderer->GetAccelerationStructureDeviceAddress(meshComponent->blas);
+
+					tlasInstances.push_back(instance);
+				}
+
+				if (!tlasInstances.empty()) {
+					// Rebuild dynamic TLAS with current frame actor transformations
+					vRenderer->BuildTLAS(
+						tlasInstances, 
+						sceneTLAS, 
+						sceneTLASBuffer, 
+						sceneTLASMemory, 
+						sceneInstanceBuffer, 
+						sceneInstanceMemory
+					);
+
+					// Update Set 1 (Lights Set) binding 2 with the TLAS handle
+					vRenderer->UpdateAccelerationStructureDescriptor(
+						lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSet[vRenderer->GetAcquiredImageIndex()],
+						2, // Match the binding = 2 index in your fragment shader
+						sceneTLAS
+					);
+				}
+				// -------------------------------------------------------------------------
 				vRenderer->RecordCommandBuffers(Recording::START);
 				
 				camera_actor_->render(vRenderer);
@@ -245,10 +283,7 @@ void Scene0::Render() const {
 				if (!ActorList.empty()) {
 					auto materialInfo = ActorList.begin()->second->GetComponent<DescriptorSetInfo>();
 					if (materialInfo) {
-						vRenderer->BindDescriptorSet(
-							pipelineInfo.pipelineLayout,
-						2,
-						materialInfo->descriptorSet);
+						vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 2, materialInfo->descriptorSet);
 						lightsManager->render(vRenderer, pipelineInfo);
 					}
 				}
@@ -313,7 +348,7 @@ void Scene0::OnDestroy() {
     	for (auto& [key, transform] : lightsManager->getLightTransforms()) {
     		delete transform;
     	}
-    	
+    	vRenderer->DestroyTLAS(sceneTLAS, sceneTLASBuffer, sceneTLASMemory, sceneInstanceBuffer, sceneInstanceMemory);
     	lightsManager->OnDestroy();
     	lightsManager.reset();
     }

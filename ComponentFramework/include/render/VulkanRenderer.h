@@ -189,7 +189,7 @@ public: /// Member functions
     const Matrix4& GetPreviousDLSSProjectionForFrame() const { return previousDLSSProjectionForFrame; }
     const Matrix4& GetPreviousDLSSViewForFrame() const { return previousDLSSViewForFrame; }
     void ResetDLSSMotionHistory() { hasPreviousDLSSViewProjection = false; }
-
+    
   
 
 
@@ -293,6 +293,48 @@ public:
     }
 
     void DestroyUBO(std::vector<BufferMemory> ubo);
+    
+    //----- Ray Tracing -----//
+    
+    VkDeviceAddress GetBufferDeviceAddress(VkBuffer buffer);
+    
+    void BuildBLAS(
+      VkBuffer vertexBuffer, 
+      VkBuffer indexBuffer, 
+      uint32_t vertexCount, 
+      uint32_t indexCount, 
+      uint32_t maxVertex, 
+      VkAccelerationStructureKHR& outBLAS, 
+      VkBuffer& outBLASBuffer, 
+      VkDeviceMemory& outBLASMemory
+  );
+    // Helper to get 64-bit device address of an acceleration structure
+    VkDeviceAddress GetAccelerationStructureDeviceAddress(VkAccelerationStructureKHR as);
+
+    // Converts engine column-major Matrix4 to VkTransformMatrixKHR (3x4 row-major)
+    VkTransformMatrixKHR Matrix4ToVkTransformMatrixKHR(const Matrix4& matrix);
+
+    // Build or rebuild the Top-Level Acceleration Structure (TLAS)
+    void BuildTLAS(
+        const std::vector<VkAccelerationStructureInstanceKHR>& instances,
+        VkAccelerationStructureKHR& outTLAS,
+        VkBuffer& outTLASBuffer,
+        VkDeviceMemory& outTLASMemory,
+        VkBuffer& outInstanceBuffer,
+        VkDeviceMemory& outInstanceMemory
+    );
+    void UpdateAccelerationStructureDescriptor(VkDescriptorSet descriptorSet, uint32_t binding, VkAccelerationStructureKHR tlas);
+    
+    void DestroyTLAS(
+    VkAccelerationStructureKHR& tlas, 
+    VkBuffer& tlasBuffer, 
+    VkDeviceMemory& tlasMemory, 
+    VkBuffer& instanceBuffer, 
+    VkDeviceMemory& instanceMemory
+) const;
+    
+    uint32_t GetCurrentFrame() const { return currentFrame; }
+    // ------ END OF RAY TRACING -----//
 
 
 private: /// Private member variables
@@ -336,6 +378,14 @@ private: /// Private member variables
     std::vector<BufferMemory> lightsUboBuffers;
     std::queue<ModelMatrixPushConst> pushConstant;
     std::vector<IndexedVertexBuffer> indexedVertexBuffers;
+    
+    // Ray Tracing
+    // Ray Tracing Function Pointers
+    PFN_vkCreateAccelerationStructureKHR pfnCreateAccelerationStructureKHR = nullptr;
+    PFN_vkDestroyAccelerationStructureKHR pfnDestroyAccelerationStructureKHR = nullptr;
+    PFN_vkGetAccelerationStructureBuildSizesKHR pfnGetAccelerationStructureBuildSizesKHR = nullptr;
+    PFN_vkCmdBuildAccelerationStructuresKHR pfnCmdBuildAccelerationStructuresKHR = nullptr;
+    PFN_vkGetAccelerationStructureDeviceAddressKHR pfnGetAccelerationStructureDeviceAddressKHR = nullptr;
 
 private:
     bool hasStencilComponent(VkFormat format);
@@ -361,9 +411,7 @@ private:
     
 
 
-  
-
-
+    
     void createSyncObjects();
     void destroySwapChain();
    

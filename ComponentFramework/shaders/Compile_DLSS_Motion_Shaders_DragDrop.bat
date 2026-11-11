@@ -62,8 +62,8 @@ if not exist "%INPUT%" (
 )
 set "OUTPUT=%INPUT%.spv"
 echo.
-echo glslc "%INPUT%" -o "%OUTPUT%"
-"%GLSLC%" "%INPUT%" -o "%OUTPUT%"
+echo glslc --target-env=vulkan1.2 "%INPUT%" -o "%OUTPUT%"
+"%GLSLC%" --target-env=vulkan1.2 "%INPUT%" -o "%OUTPUT%"
 if errorlevel 1 (
     echo ERROR: Shader compilation failed: "%INPUT%"
     exit /b 1
