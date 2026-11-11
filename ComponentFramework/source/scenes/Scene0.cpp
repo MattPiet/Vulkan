@@ -229,6 +229,7 @@ void Scene0::Render() const {
 						sceneInstanceBuffer, 
 						sceneInstanceMemory
 					);
+				vRenderer->RecordCommandBuffers(Recording::START);
 
 					// Update Set 1 (Lights Set) binding 2 with the TLAS handle
 					vRenderer->UpdateAccelerationStructureDescriptor(
@@ -238,7 +239,6 @@ void Scene0::Render() const {
 					);
 				}
 				// -------------------------------------------------------------------------
-				vRenderer->RecordCommandBuffers(Recording::START);
 				
 				camera_actor_->render(vRenderer);
 				// Bind pipeline
