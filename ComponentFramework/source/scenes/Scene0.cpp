@@ -171,6 +171,17 @@ void Scene0::Update(const float deltaTime) {
                tlasInstanceBuffer, tlasInstanceMemory
            );
        }
+       
+       auto lightsDescInfo = lightsManager->GetComponent<DescriptorSetInfo>();
+       if (lightsDescInfo) {
+          for (size_t i = 0; i < vRenderer->getNumSwapchains(); i++) {
+             vRenderer->UpdateAccelerationStructureDescriptor(
+                 lightsDescInfo->descriptorSet[i], 
+                 2, // Binding 2 for "topLevelAS" in your shader
+                 tlas
+             );
+          }
+       }
        // ------------------------------------------
     }
 

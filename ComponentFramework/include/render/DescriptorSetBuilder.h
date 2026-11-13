@@ -79,6 +79,9 @@ public:
     /// Add SamplerCube descriptor
     DescriptorSetBuilder& add(uint32_t binding, VkDescriptorType descriptorType,
     VkShaderStageFlags stageFlags, uint32_t count, SamplerCube* cubeData);
+    
+    DescriptorSetBuilder& add(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t count);
+    
 
     DescriptorSetInfo BuildDescriptorSet(uint32_t numSwapChains_);
 

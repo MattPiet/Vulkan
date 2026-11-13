@@ -43,8 +43,15 @@ bool LightsManager::OnCreate(VulkanRenderer* vRenderer)
         // Very simple just makes the UBO and descriptor set for the lights data.
         LightsUBO = vRenderer->CreateUniformBuffers<LightsData>();
         DescriptorSetBuilder LightsDescriptorBuilder(vRenderer->getDevice());
+        
+        // Binding 0: Lights UBO
         LightsDescriptorBuilder.add(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1, LightsUBO);
+        
+        // Binding 2: Top-Level Acceleration Structure (TLAS) for Ray Query
+        LightsDescriptorBuilder.add(2, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+
         *GetComponent<DescriptorSetInfo>() = LightsDescriptorBuilder.BuildDescriptorSet(vRenderer->getNumSwapchains());
+        
         vRenderer->UpdateUniformBuffer<LightsData>(lights, LightsUBO);
     }    
     return true;

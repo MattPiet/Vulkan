@@ -239,10 +239,21 @@ void VulkanRenderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, V
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
 
+    // ADD THIS: Required allocation flags structure
+    VkMemoryAllocateFlagsInfo allocFlagsInfo{};
+    allocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    allocFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+    
+    // Chain the flags if the buffer uses device addresses
+    if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+        allocFlagsInfo.pNext = allocInfo.pNext;
+        allocInfo.pNext = &allocFlagsInfo;
+    }
 
     if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate buffer memory!");
@@ -319,43 +330,43 @@ void VulkanRenderer::createLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    // Setup Vulkan 1.2 Features
+    // Feature chaining (Vulkan 1.2, AS, RT Pipeline, Ray Query)
     VkPhysicalDeviceVulkan12Features features12{};
     features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-    features12.bufferDeviceAddress = VK_TRUE; // KEEP THIS: Mandatory for Ray Tracing
-    features12.timelineSemaphore = VK_TRUE;
+    features12.bufferDeviceAddress = VK_TRUE;
+    features12.timelineSemaphore = VK_FALSE; // Kept false to avoid your earlier swapchain crash
 
-    // Acceleration Structure Features
     VkPhysicalDeviceAccelerationStructureFeaturesKHR asFeatures{};
     asFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
     asFeatures.accelerationStructure = VK_TRUE;
 
-    // Ray Tracing Pipeline Features
     VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeatures{};
     rtPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
     rtPipelineFeatures.rayTracingPipeline = VK_TRUE;
 
-    // Chain them together: features2 -> features12 -> rtPipelineFeatures -> asFeatures
-    rtPipelineFeatures.pNext = &asFeatures;
+    // ADD THIS: Ray Query Features structure
+    VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
+    rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    rayQueryFeatures.rayQuery = VK_TRUE;
+
+    // Chain them together: features12 -> rtPipelineFeatures -> rayQueryFeatures -> asFeatures
+    rayQueryFeatures.pNext = &asFeatures;
+    rtPipelineFeatures.pNext = &rayQueryFeatures;
     features12.pNext = &rtPipelineFeatures;
     
-    // Setup Base Vulkan 1.0 Features and chain to 1.2
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
-    deviceFeatures2.features.shaderStorageImageWriteWithoutFormat = VK_TRUE; // Fixes SPIR-V error
+    deviceFeatures2.features.shaderStorageImageWriteWithoutFormat = VK_TRUE;
     deviceFeatures2.pNext = &features12;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-
-    // Pass features via pNext, disable old pEnabledFeatures
     createInfo.pEnabledFeatures = nullptr; 
     createInfo.pNext = &deviceFeatures2;
 
-    // Ensure VK_KHR_push_descriptor is enabled to fix the layout errors
     std::vector<const char*> activeExtensions = deviceExtensions;
     bool hasPushDescriptor = false;
     for (const char* ext : activeExtensions) {
@@ -370,23 +381,23 @@ void VulkanRenderer::createLogicalDevice() {
 
     createInfo.enabledExtensionCount = static_cast<uint32_t>(activeExtensions.size());
     createInfo.ppEnabledExtensionNames = activeExtensions.data();
-
-
     createInfo.enabledLayerCount = 0; 
-    
+
+    // CREATE THE DEVICE FIRST
+    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create logical device!");
+    }
+
+    // LOAD FUNCTION POINTERS AFTER DEVICE IS VALID
     pfnCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(device, "vkCreateAccelerationStructureKHR");
     pfnDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(device, "vkDestroyAccelerationStructureKHR");
     pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(device, "vkGetAccelerationStructureBuildSizesKHR");
     pfnCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(device, "vkCmdBuildAccelerationStructuresKHR");
     pfnGetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(device, "vkGetAccelerationStructureDeviceAddressKHR");
-
+    
     pfnCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR");
     pfnGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesKHR");
     pfnCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(device, "vkCmdTraceRaysKHR");
-    
-    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create logical device!");
-    }
 
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
