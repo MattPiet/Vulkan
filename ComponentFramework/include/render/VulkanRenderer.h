@@ -285,6 +285,14 @@ public:
     VkBuffer& instanceBuffer, 
     VkDeviceMemory& instanceMemory) const;
     
+    // Ray Tracing
+    // Ray Tracing Function Pointers
+    PFN_vkCreateAccelerationStructureKHR pfnCreateAccelerationStructureKHR = nullptr;
+    PFN_vkDestroyAccelerationStructureKHR pfnDestroyAccelerationStructureKHR = nullptr;
+    PFN_vkGetAccelerationStructureBuildSizesKHR pfnGetAccelerationStructureBuildSizesKHR = nullptr;
+    PFN_vkCmdBuildAccelerationStructuresKHR pfnCmdBuildAccelerationStructuresKHR = nullptr;
+    PFN_vkGetAccelerationStructureDeviceAddressKHR pfnGetAccelerationStructureDeviceAddressKHR = nullptr;
+    
 
 private: /// Private member variables
     const uint32_t MAX_FRAMES_IN_FLIGHT;
