@@ -120,6 +120,9 @@ void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
 			break;
 		}
 	}
+constexpr double delay = 1;
+float seconds = 0.0f;;
+float frames = 0.0f;
 void Scene0::Update(const float deltaTime) {
 	
 	if (renderer->getRendererType() == RendererType::VULKAN)
@@ -128,6 +131,15 @@ void Scene0::Update(const float deltaTime) {
 		camera_actor_->CameraMovement(deltaTime, nullptr);
 		vRenderer->UpdateUniformBuffer<CameraData>(camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
 		
+		seconds += deltaTime;
+		frames ++;
+		if (seconds >= delay) {
+			float fps = frames / seconds;
+			std::string title = "Vulkan Renderer - FPS: " + std::to_string(fps);
+			SDL_SetWindowTitle(vRenderer->getWindow(), title.c_str());
+			seconds = 0.0f;
+			frames = 0.0f;
+		}
 		LightsData dynamicLights = lightsManager->GetLightsData(); 
        
 		float pulseSpeed = 1.0f; 

@@ -337,6 +337,7 @@ public:
     // ------ END OF RAY TRACING -----//
 
 
+    SDL_Window* window;
 private: /// Private member variables
     const uint32_t MAX_FRAMES_IN_FLIGHT;
     uint32_t numSwapchains;
@@ -346,7 +347,6 @@ private: /// Private member variables
     SDL_Event sdlEvent;
     uint32_t windowWidth;
     uint32_t windowHeight;
-    SDL_Window* window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
     VkSurfaceKHR surface;
