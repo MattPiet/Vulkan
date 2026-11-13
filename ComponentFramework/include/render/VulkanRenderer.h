@@ -247,6 +247,44 @@ public:
 
     void DestroyUBO(std::vector<BufferMemory> ubo);
 
+    //----- Ray Tracing -----//
+    
+    VkDeviceAddress GetBufferDeviceAddress(VkBuffer buffer);
+    
+    void BuildBLAS(
+      VkBuffer vertexBuffer, 
+      VkBuffer indexBuffer, 
+      uint32_t vertexCount, 
+      uint32_t indexCount, 
+      uint32_t maxVertex, 
+      VkAccelerationStructureKHR& outBLAS, 
+      VkBuffer& outBLASBuffer, 
+      VkDeviceMemory& outBLASMemory
+  );
+    // Helper to get 64-bit device address of an acceleration structure
+    VkDeviceAddress GetAccelerationStructureDeviceAddress(VkAccelerationStructureKHR as);
+
+    // Converts engine column-major Matrix4 to VkTransformMatrixKHR (3x4 row-major)
+    VkTransformMatrixKHR Matrix4ToVkTransformMatrixKHR(const Matrix4& matrix);
+
+    // Build or rebuild the Top-Level Acceleration Structure (TLAS)
+    void BuildTLAS(
+        const std::vector<VkAccelerationStructureInstanceKHR>& instances,
+        VkAccelerationStructureKHR& outTLAS,
+        VkBuffer& outTLASBuffer,
+        VkDeviceMemory& outTLASMemory,
+        VkBuffer& outInstanceBuffer,
+        VkDeviceMemory& outInstanceMemory
+    );
+    void UpdateAccelerationStructureDescriptor(VkDescriptorSet descriptorSet, uint32_t binding, VkAccelerationStructureKHR tlas);
+    
+    void DestroyTLAS(
+    VkAccelerationStructureKHR& tlas, 
+    VkBuffer& tlasBuffer, 
+    VkDeviceMemory& tlasMemory, 
+    VkBuffer& instanceBuffer, 
+    VkDeviceMemory& instanceMemory) const;
+    
 
 private: /// Private member variables
     const uint32_t MAX_FRAMES_IN_FLIGHT;
