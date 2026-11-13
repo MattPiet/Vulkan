@@ -25,6 +25,7 @@ SDL_Window* VulkanRenderer::CreateWindow(std::string name_, int width_, int heig
     }
     window = SDL_CreateWindow(name_.c_str(), windowWidth, windowHeight, 
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+
     return window;
 }
 
@@ -101,63 +102,71 @@ void VulkanRenderer::RecreateSwapChain() {
 
 
 
-void VulkanRenderer::Render() {
-    vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-    uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, 
-        imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        throw std::runtime_error("failed to acquire swap chain image!");
-    }
-    
-    if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-        vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
-    }
-    // inflight means that the fence is currently working on something
-    imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
+void VulkanRenderer::Render()
+{
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkSemaphore waitSemaphores[] = {
+        imageAvailableSemaphores[currentFrame]
+    };
+
+    VkPipelineStageFlags waitStages[] = {
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    };
+
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &primaryCommandBuffer.commandBuffers[imageIndex];
+    submitInfo.pCommandBuffers =
+        &primaryCommandBuffer.commandBuffers[imageIndex];
 
-    VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+    VkSemaphore signalSemaphores[] = {
+        renderFinishedSemaphores[currentFrame]
+    };
+
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
     vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+    if (vkQueueSubmit(
+        graphicsQueue,
+        1,
+        &submitInfo,
+        inFlightFences[currentFrame]) != VK_SUCCESS)
+    {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 
     VkSwapchainKHR swapChains[] = { swapChain };
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
-
     presentInfo.pImageIndices = &imageIndex;
 
-    result = vkQueuePresentKHR(presentQueue, &presentInfo);
+    VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-    
-    if (result != VK_SUCCESS) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR ||
+        result == VK_SUBOPTIMAL_KHR)
+    {
+        RecreateSwapChain();
+    }
+    else if (result != VK_SUCCESS)
+    {
         throw std::runtime_error("failed to present swap chain image!");
     }
+
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
+
 
 void VulkanRenderer::DestroyUBO(std::vector<BufferMemory> ubo){
      for (size_t i = 0; i < ubo.size(); i++) {
@@ -787,7 +796,9 @@ VkPresentModeKHR VulkanRenderer::chooseSwapPresentMode(const std::vector<VkPrese
             return availablePresentMode;
         }
     }
+    //return VK_PRESENT_MODE_IMMEDIATE_KHR; // Changed from FIFO to IMMEDIATE for lower latency, but may cause tearing
     return VK_PRESENT_MODE_FIFO_KHR;
+    
 }
 
 VkExtent2D VulkanRenderer::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
@@ -999,9 +1010,12 @@ void VulkanRenderer::createSurface() {
 }
 
 void VulkanRenderer::BindPipeline(VkPipeline pipeline) {
-    for (uint32_t i = 0; i < getNumSwapchains(); i++) {
-        vkCmdBindPipeline(primaryCommandBuffer.commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    }
+    vkCmdBindPipeline(
+        primaryCommandBuffer.commandBuffers[imageIndex],
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pipeline
+    );
+
 }
 
 //------------------- RAY TRACING -------------------//
@@ -1319,10 +1333,16 @@ void VulkanRenderer::UpdateAccelerationStructureDescriptor(VkDescriptorSet descr
 /// During rendering, bind the descriptor set associated with the current swapchain image.
 
 void VulkanRenderer::BindDescriptorSet(VkPipelineLayout pipelineLayout, int firstSet, std::vector<VkDescriptorSet> descriptorSet){
-    for (uint32_t i = 0; i < numSwapchains; i++) {
-        vkCmdBindDescriptorSets(primaryCommandBuffer.commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipelineLayout, firstSet, 1, &descriptorSet[i], 0, nullptr);
-    }
+    vkCmdBindDescriptorSets(
+           primaryCommandBuffer.commandBuffers[imageIndex],
+           VK_PIPELINE_BIND_POINT_GRAPHICS,
+           pipelineLayout,
+           firstSet,
+           1,
+           &descriptorSet[imageIndex],
+           0,
+           nullptr
+       );
 }
 
 void VulkanRenderer::SetPushConstant(const PipelineInfo pipelineInfo, const Matrix4& modelMatrix_) {
@@ -1343,9 +1363,14 @@ void VulkanRenderer::SetPushConstant(const PipelineInfo pipelineInfo, const Matr
     modelMatrixPushConst.normalMatrix[1].z = normalMatrix[7];
     modelMatrixPushConst.normalMatrix[2].z = normalMatrix[8];
 
-    for (uint32_t i = 0; i < getNumSwapchains(); i++) {
-        vkCmdPushConstants(primaryCommandBuffer.commandBuffers[i], pipelineInfo.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ModelMatrixPushConst), &modelMatrixPushConst);
-    }
+    vkCmdPushConstants(
+      primaryCommandBuffer.commandBuffers[imageIndex],
+      pipelineInfo.pipelineLayout,
+      VK_SHADER_STAGE_VERTEX_BIT,
+      0,
+      sizeof(ModelMatrixPushConst),
+      &modelMatrixPushConst
+  );
 }
 
 

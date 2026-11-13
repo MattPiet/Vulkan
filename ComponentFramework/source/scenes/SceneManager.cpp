@@ -85,7 +85,6 @@ void SceneManager::Run() {
 		currentScene->Update(timer->GetDeltaTime());
 		currentScene->Render();
 		GetEvents();
-		SDL_Delay(timer->GetSleepTime(fps));	
 		if (loadStagedScene)
 		{
 				std::thread th1([=]

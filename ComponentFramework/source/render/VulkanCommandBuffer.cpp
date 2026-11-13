@@ -28,40 +28,79 @@ void VulkanRenderer::CreateCommandBuffers() {
     }
 }
 // command buffer is a list of instructions 
-void VulkanRenderer::RecordCommandBuffers(Recording start_stop) {
-    if (start_stop == Recording::START) {
-        vkDeviceWaitIdle(device); /// This is bad
-        for (size_t i = 0; i < primaryCommandBuffer.commandBuffers.size(); i++) {
-            VkCommandBufferBeginInfo beginInfo{};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+void VulkanRenderer::RecordCommandBuffers(Recording start_stop)
+{
+    if (start_stop == Recording::START)
+    {
+        vkWaitForFences(
+            device, 1,
+            &inFlightFences[currentFrame],
+            VK_TRUE, UINT64_MAX
+        );
 
-            if (vkBeginCommandBuffer(primaryCommandBuffer.commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-                throw std::runtime_error("failed to begin recording command buffer!");
-            }
+        VkResult result = vkAcquireNextImageKHR(
+            device,
+            swapChain,
+            UINT64_MAX,
+            imageAvailableSemaphores[currentFrame],
+            VK_NULL_HANDLE,
+            &imageIndex
+        );
 
-            VkRenderPassBeginInfo renderPassInfo{};
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = renderPass;
-            renderPassInfo.framebuffer = swapChainFramebuffers[i];
-            renderPassInfo.renderArea.offset = { 0, 0 };
-            renderPassInfo.renderArea.extent = swapChainExtent;
+        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+            throw std::runtime_error("failed to acquire swapchain image!");
 
-            std::array<VkClearValue, 2> clearValues{};
-            clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-            clearValues[1].depthStencil = { 1.0f, 0 };
-
-            renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-            renderPassInfo.pClearValues = clearValues.data();
-            vkCmdBeginRenderPass(primaryCommandBuffer.commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        if (imagesInFlight[imageIndex] != VK_NULL_HANDLE)
+        {
+            vkWaitForFences(
+                device, 1,
+                &imagesInFlight[imageIndex],
+                VK_TRUE, UINT64_MAX
+            );
         }
+
+        imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+        VkCommandBuffer cmd = primaryCommandBuffer.commandBuffers[imageIndex];
+
+        if (vkResetCommandBuffer(cmd, 0) != VK_SUCCESS)
+            throw std::runtime_error("failed to reset command buffer!");
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+        if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS)
+            throw std::runtime_error("failed to begin recording command buffer!");
+
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = swapChainExtent;
+
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+
+        renderPassInfo.clearValueCount =
+            static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        vkCmdBeginRenderPass(
+            cmd,
+            &renderPassInfo,
+            VK_SUBPASS_CONTENTS_INLINE
+        );
     }
-    else if (start_stop == Recording::STOP) {
-        for (size_t i = 0; i < primaryCommandBuffer.commandBuffers.size(); i++) {
-            vkCmdEndRenderPass(primaryCommandBuffer.commandBuffers[i]);
-            if (vkEndCommandBuffer(primaryCommandBuffer.commandBuffers[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to record command buffer!");
-            }
-        }
+    else if (start_stop == Recording::STOP)
+    {
+        VkCommandBuffer cmd = primaryCommandBuffer.commandBuffers[imageIndex];
+
+        vkCmdEndRenderPass(cmd);
+
+        if (vkEndCommandBuffer(cmd) != VK_SUCCESS)
+            throw std::runtime_error("failed to end command buffer!");
     }
 }
 

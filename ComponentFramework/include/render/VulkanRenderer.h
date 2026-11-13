@@ -308,6 +308,7 @@ public:
     };
     // ------ END OF RAY TRACING -----//
     
+    SDL_Window* window;
 
 private: /// Private member variables
     const uint32_t MAX_FRAMES_IN_FLIGHT;
@@ -316,7 +317,6 @@ private: /// Private member variables
     SDL_Event sdlEvent;
     uint32_t windowWidth;
     uint32_t windowHeight;
-    SDL_Window* window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
     VkSurfaceKHR surface;
@@ -348,6 +348,8 @@ private: /// Private member variables
     std::vector<BufferMemory> lightsUboBuffers;
     std::queue<ModelMatrixPushConst> pushConstant;
     std::vector<IndexedVertexBuffer> indexedVertexBuffers;
+    uint32_t imageIndex = 0;
+  
 
 private:
     bool hasStencilComponent(VkFormat format);

@@ -9,21 +9,21 @@ bool LightsManager::OnCreate(VulkanRenderer* vRenderer)
     if (isCreated) return true;
     isCreated = true;
     // 0
-    lights.diffuse[0] = Vec4(0.0, 0.0, 0.9, 0.0);
+    lights.diffuse[0] = Vec4(0.0, 0.0, 0.9, brightness);
     lights.specular[0] = Vec4(0.0, 0.0, 0.3, 0.0);
     lights.ambient = Vec4(0.01, 0.01, 0.01, 0.0);
     lights.numLights = 4;
     lights.pos[0] = Vec4(-4.0f, -5.0f, -5.0f, 0.0f);
     // 1
-    lights.diffuse[1] = Vec4(0.0, 0.9, 0.0, 0.0);
+    lights.diffuse[1] = Vec4(0.0, 0.9, 0.0, brightness);
     lights.specular[1] = Vec4(0.0, 0.3, 0.0, 0.0);
-    lights.pos[1] = Vec4(-4.0f, 5.0f, -5.0f, 0.0f);
+    lights.pos[1] = Vec4(-4.0f, 5.0f, 5.0f, 0.0f);
     // 2
-    lights.diffuse[2] = Vec4(0.9, 0.0, 0.0, 0.0);
+    lights.diffuse[2] = Vec4(0.9, 0.0, 0.0, brightness);
     lights.specular[2] = Vec4(0.3, 0.0, 0.0, 0.0);
-    lights.pos[2] = Vec4(4.0f, 5.0f, -5.0f, 0.0f);
+    lights.pos[2] = Vec4(4.0f, 5.0f, 5.0f, 0.0f);
     // 2
-    lights.diffuse[3] = Vec4(0.5, 0.0, 0.5, 0.0);
+    lights.diffuse[3] = Vec4(0.5, 0.0, 0.5, brightness);
     lights.specular[3] = Vec4(0.1, 0.0, 0.1, 0.0);
     lights.pos[3] = Vec4(4.0f, -5.0f, -5.0f, 0.0f);
         lights.numLights = 4;

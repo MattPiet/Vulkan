@@ -11,7 +11,7 @@ layout(location = 3) in vec3 lightDir[MAX_LIGHTS];
 
 layout(set = 1, binding = 0) uniform LightsUBO {
 	vec4 pos[MAX_LIGHTS];
-	vec4 diffuse[MAX_LIGHTS];
+	vec4 diffuse[MAX_LIGHTS];   // rgb = color, w = brightness/intensity multiplier
 	vec4 specular[MAX_LIGHTS];
 	vec4 ambient;
 	uint numLights;
@@ -48,37 +48,47 @@ void main() {
 
 		// Derive fragment world position from light vector
 		vec3 worldPos = lights.pos[i].xyz - lightDir[i];
-		
-		vec3 rayOrigin = worldPos + normal * 0.04;
+
+		// Ray origin biased along surface normal to prevent shadow acne
+		vec3 rayOrigin = worldPos + normal * 0.002;
 
 		// Trace shadow ray query toward light source
 		rayQueryEXT rayQuery;
 		rayQueryInitializeEXT(
 				rayQuery,
 				topLevelAS,
-				gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT,
+				gl_RayFlagsTerminateOnFirstHitEXT |
+				gl_RayFlagsOpaqueEXT |
+				gl_RayFlagsSkipClosestHitShaderEXT |
+				gl_RayFlagsCullBackFacingTrianglesEXT,
 				0xFF,
 				rayOrigin,
-				0.001,            // tMin increased to 0.1
-				lightDirection, // Ray direction
-				distance - 0.001  // tMax adjusted
+				0.02,
+				lightDirection,
+				distance
 		);
 
 		while (rayQueryProceedEXT(rayQuery)) {}
 
 		float shadow = 1.0;
 		if (rayQueryGetIntersectionTypeEXT(rayQuery, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
-			shadow = 0.0; // In shadow
+			float occularDistance = rayQueryGetIntersectionTEXT(rayQuery, true) ;
+			float penumbra = clamp(occularDistance / 3, 0.0, 1.0);
+			shadow = 1.0 - penumbra;
 		}
 
 		float attenuation = 1.0 / (constant + linear * distance + quadratic * (distance * distance));
 		vec4 ks = lights.specular[i];
 		vec4 kd = lights.diffuse[i];
 
+		// Extract brightness multiplier from the w component of diffuse
+		float brightness = lights.diffuse[i].w;
+
 		vec3 reflection = normalize(reflect(-lightDirection, normal));
 		float spec = pow(max(dot(eyeDirection, reflection), 0.0), 14.0);
 
-		phongResult += (((diff * kd * kt * attenuation) + (spec * ks * attenuation)) * shadow);
+		// Scale diffuse and specular lighting by brightness (shadows scale proportionally, staying dark)
+		phongResult += (((diff * kd * kt * attenuation) + (spec * ks * attenuation)) * shadow) * brightness;
 	}
 
 	fragColor = phongResult + (ka * kt);

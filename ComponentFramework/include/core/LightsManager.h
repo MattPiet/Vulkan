@@ -16,7 +16,7 @@ class LightsManager : public Actor
 public:
     std::unordered_map<std::string, IndexedVertexBuffer*> lightMeshes;
     bool renderMeshes;
-    
+    float brightness = 1.0;
     LightsManager(std::weak_ptr<Component> parent) : Actor(parent) {}
     bool OnCreate(VulkanRenderer* vRenderer) override;
     void OnDestroy() override;

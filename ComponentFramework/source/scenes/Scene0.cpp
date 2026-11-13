@@ -101,14 +101,22 @@ void Scene0::HandleEvents(const SDL_Event& sdlEvent) {
           break;
        }
 }
-
+constexpr double delay = 1;
+float framecount = 0.0;
+float seconds = 0.0f;
 void Scene0::Update(const float deltaTime) {
     if (renderer->getRendererType() == RendererType::VULKAN)
     {
        VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
        camera_actor_->CameraMovement(deltaTime, nullptr);
        vRenderer->UpdateUniformBuffer<CameraData>(camera_actor_->GetCameraData(), camera_actor_->GetCameraUBO());
-       
+       ++framecount;
+       seconds += deltaTime;
+       if (seconds >= delay) {
+            SDL_SetWindowTitle(vRenderer->window, ("Vulkan Renderer - FPS: " + std::to_string(framecount / seconds)).c_str());
+           seconds = 0.0f;
+           framecount = 0.0f;
+       }
        LightsData dynamicLights = lightsManager->GetLightsData(); 
        
        float pulseSpeed = 1.0f; 
@@ -123,25 +131,25 @@ void Scene0::Update(const float deltaTime) {
        float x = radius * std::cos(elapsedTime * speed);
        float z = radius * std::sin(elapsedTime * speed);
        float y = lightsManager->getLightTransforms().at("0")->GetPosition().y;
-       lightsManager->setPosition("0", Vec3(x, y, z));
+      // lightsManager->setPosition("0", Vec3(x, y, z));
        
        // Light 1 
        x = radius * std::cos(elapsedTime * speed + 1.57f);
        z = radius * std::sin(elapsedTime * speed + 1.57f);
        y = lightsManager->getLightTransforms().at("1")->GetPosition().y;
-       lightsManager->setPosition("1", Vec3(x, y, z));
+      // lightsManager->setPosition("1", Vec3(x, y, z));
        
        // Light 2 
        x = radius * std::cos(elapsedTime * speed + 3.14f);
        z = radius * std::sin(elapsedTime * speed + 3.14f);
        y = lightsManager->getLightTransforms().at("2")->GetPosition().y;
-       lightsManager->setPosition("2", Vec3(x, y, z));
+       //lightsManager->setPosition("2", Vec3(x, y, z));
        
        // Light 3 
        x = radius * std::cos(elapsedTime * speed + 4.71f);
        z = radius * std::sin(elapsedTime * speed + 4.71f);
        y = lightsManager->getLightTransforms().at("3")->GetPosition().y;
-       lightsManager->setPosition("3", Vec3(x, y, z));
+       //lightsManager->setPosition("3", Vec3(x, y, z));
 
        vRenderer->UpdateUniformBuffer<LightsData>(lightsManager->GetLightsData(), lightsManager->GetLightsUBO());
        
@@ -195,42 +203,55 @@ void Scene0::Update(const float deltaTime) {
 }
 
 void Scene0::Render() const {
-    switch (renderer->getRendererType())
-    {
-    case RendererType::VULKAN:
-       {
-          VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
-          std::scoped_lock lock(vulkanMutex);
-          vRenderer->RecordCommandBuffers(Recording::START);
+   switch (renderer->getRendererType())
+   {
+   case RendererType::VULKAN:
+      {
+         VulkanRenderer* vRenderer = dynamic_cast<VulkanRenderer*>(renderer);
+         std::scoped_lock lock(vulkanMutex);
+         vRenderer->RecordCommandBuffers(Recording::START);
           
-          camera_actor_->render(vRenderer);
-          vRenderer->BindPipeline(pipelineInfo.pipeline);
-          vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 0, camera_actor_->GetCameraUBODescriptorSetInfo().descriptorSet);
-          vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 1, lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSet);
+         camera_actor_->render(vRenderer);
+         vRenderer->BindPipeline(pipelineInfo.pipeline);
           
-          for (const auto& [name, actor] : ActorList) {
-             switch (camera_actor_->CheckFrustum(actor->GetModelMatrix()) ) { 
-             case FrustumCollision::CULLED_NEAR:
-             case FrustumCollision::CULLED_FAR:
-             case FrustumCollision::CULLED_RIGHT:
-             case FrustumCollision::CULLED_LEFT:
-             case FrustumCollision::CULLED_TOP:
-             case FrustumCollision::CULLED_BOTTOM:
-                break; 
-             default:
-                actor->render(vRenderer, pipelineInfo);
-                break;
-             }
-          }
-          lightsManager->render(vRenderer, pipelineInfo);
-          vRenderer->RecordCommandBuffers(Recording::STOP);
-          vRenderer->Render();
-          break;
-       }
+         // Bind Set 0 (Camera) and Set 1 (Lights & topLevelAS)
+         vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 0, camera_actor_->GetCameraUBODescriptorSetInfo().descriptorSet);
+         vRenderer->BindDescriptorSet(pipelineInfo.pipelineLayout, 1, lightsManager->GetComponent<DescriptorSetInfo>()->descriptorSet);
+          
+         for (const auto& [name, actor] : ActorList) {
+            switch (camera_actor_->CheckFrustum(actor->GetModelMatrix()) ) { 
+            case FrustumCollision::CULLED_NEAR:
+            case FrustumCollision::CULLED_FAR:
+            case FrustumCollision::CULLED_RIGHT:
+            case FrustumCollision::CULLED_LEFT:
+            case FrustumCollision::CULLED_TOP:
+            case FrustumCollision::CULLED_BOTTOM:
+               break; 
+            default:
+               // Actor render handles its own local vertex/material bindings if needed, 
+               // but we don't bind an invalid Set 2 here since topLevelAS lives in Set 1.
+               actor->render(vRenderer, pipelineInfo);
+               break;
+            }
+         }
+         auto textureInfo = ActorList.begin()->second->GetComponent<DescriptorSetInfo>();
 
-    case RendererType::OPENGL:
-       break;
-    }
+         if (textureInfo) {
+            vRenderer->BindDescriptorSet(
+                pipelineInfo.pipelineLayout,
+                2,
+                textureInfo->descriptorSet
+            );
+         }
+         lightsManager->render(vRenderer, pipelineInfo);
+         vRenderer->RecordCommandBuffers(Recording::STOP);
+         vRenderer->Render();
+         break;
+      }
+
+   case RendererType::OPENGL:
+      break;
+   }
 }
 
 void Scene0::OnDestroy() {
