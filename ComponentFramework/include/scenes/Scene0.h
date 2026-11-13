@@ -32,6 +32,13 @@ private:
 	std::unordered_map<std::string, Ref<Actor>> ActorList;
 	Ref<XMLAssetManager> assetManager;
 	
+	
+	VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+	VkBuffer tlasBuffer = VK_NULL_HANDLE;
+	VkDeviceMemory tlasMemory = VK_NULL_HANDLE;
+	VkBuffer tlasInstanceBuffer = VK_NULL_HANDLE;
+	VkDeviceMemory tlasInstanceMemory = VK_NULL_HANDLE;
+	
 	float elapsedTime = 0.0f;
 	bool hasLoaded = false;
 	bool hasSwapped = false;

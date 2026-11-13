@@ -145,6 +145,21 @@ if (!loaded)
     CreateVertexBuffer(indexedVertexBuffer, vertices);
     CreateIndexBuffer(indexedVertexBuffer, indices);
     
+    uint32_t vertexCount = static_cast<uint32_t>(vertices.getSize());
+    uint32_t indexCount = static_cast<uint32_t>(indices.getSize());
+    uint32_t maxVertex = vertexCount > 0 ? vertexCount - 1 : 0;
+
+    BuildBLAS(
+        indexedVertexBuffer.vertBufferID,
+        indexedVertexBuffer.indexBufferID,
+        vertexCount,
+        indexCount,
+        maxVertex,
+        indexedVertexBuffer.blas,
+        indexedVertexBuffer.blasBuffer,
+        indexedVertexBuffer.blasMemory
+    );
+    
     MonitorTimingEnd(name.c_str());
     return indexedVertexBuffer;
 }
@@ -164,8 +179,12 @@ void VulkanRenderer::CreateVertexBuffer(IndexedVertexBuffer& indexedBufferMemory
     memcpy(data, vertices.data(), bufferSize);
     vkUnmapMemory(device, stagingBuffer.bufferMemoryID);
 
-    CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.vertBufferID, indexedBufferMemory.vertBufferMemoryID);
+    CreateBuffer(bufferSize, 
+         VK_BUFFER_USAGE_TRANSFER_DST_BIT | 
+         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | 
+         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | 
+         VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.vertBufferID, indexedBufferMemory.vertBufferMemoryID);
 
     CopyBuffer(stagingBuffer.bufferID, indexedBufferMemory.vertBufferID, bufferSize);
 
@@ -187,8 +206,12 @@ void VulkanRenderer::CreateVertexBuffer(IndexedVertexBuffer& indexedBufferMemory
     memcpy(data, vertices.getData(), bufferSize);
     vkUnmapMemory(device, stagingBuffer.bufferMemoryID);
 
-    CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.vertBufferID, indexedBufferMemory.vertBufferMemoryID);
+    CreateBuffer(bufferSize, 
+          VK_BUFFER_USAGE_TRANSFER_DST_BIT | 
+          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | 
+          VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | 
+          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.vertBufferID, indexedBufferMemory.vertBufferMemoryID);
 
     CopyBuffer(stagingBuffer.bufferID, indexedBufferMemory.vertBufferID, bufferSize);
 
@@ -210,8 +233,12 @@ void VulkanRenderer::CreateIndexBuffer(IndexedVertexBuffer& indexedBufferMemory,
     memcpy(data, indices.data(), bufferSize);
     vkUnmapMemory(device, stagingBuffer.bufferMemoryID);
 
-    CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.indexBufferID, indexedBufferMemory.indexBufferMemoryID);
+    CreateBuffer(bufferSize, 
+         VK_BUFFER_USAGE_TRANSFER_DST_BIT | 
+         VK_BUFFER_USAGE_INDEX_BUFFER_BIT | 
+         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | 
+         VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.indexBufferID, indexedBufferMemory.indexBufferMemoryID);
 
     CopyBuffer(stagingBuffer.bufferID, indexedBufferMemory.indexBufferID, bufferSize);
 
@@ -233,8 +260,12 @@ void VulkanRenderer::CreateIndexBuffer(IndexedVertexBuffer& indexedBufferMemory,
     memcpy(data, indices.getData(), bufferSize);
     vkUnmapMemory(device, stagingBuffer.bufferMemoryID);
 
-    CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.indexBufferID, indexedBufferMemory.indexBufferMemoryID);
+    CreateBuffer(bufferSize, 
+          VK_BUFFER_USAGE_TRANSFER_DST_BIT | 
+          VK_BUFFER_USAGE_INDEX_BUFFER_BIT | 
+          VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | 
+          VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexedBufferMemory.indexBufferID, indexedBufferMemory.indexBufferMemoryID);
 
     CopyBuffer(stagingBuffer.bufferID, indexedBufferMemory.indexBufferID, bufferSize);
 
@@ -258,6 +289,20 @@ void VulkanRenderer::DrawIndexed(IndexedVertexBuffer mesh) {
 }
 
 void VulkanRenderer::DestroyIndexedMesh(IndexedVertexBuffer mesh){
+    vkDeviceWaitIdle(device);
+
+    // Destroy BLAS components first
+    if (mesh.blas != VK_NULL_HANDLE && pfnDestroyAccelerationStructureKHR != nullptr) {
+        pfnDestroyAccelerationStructureKHR(device, mesh.blas, nullptr);
+    }
+    if (mesh.blasBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, mesh.blasBuffer, nullptr);
+    }
+    if (mesh.blasMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(device, mesh.blasMemory, nullptr);
+    }
+
+    // Destroy standard vertex and index buffers
     vkDestroyBuffer(device, mesh.vertBufferID, nullptr);
     vkFreeMemory(device, mesh.vertBufferMemoryID, nullptr);
     vkDestroyBuffer(device, mesh.indexBufferID, nullptr);

@@ -319,13 +319,27 @@ void VulkanRenderer::createLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    // 1. Setup Vulkan 1.2 Features
+    // Setup Vulkan 1.2 Features
     VkPhysicalDeviceVulkan12Features features12{};
     features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-    features12.bufferDeviceAddress = VK_TRUE; // Required for Streamline DLSS
-    features12.timelineSemaphore = VK_TRUE;   // Fixes VK_SEMAPHORE_TYPE_TIMELINE error
+    features12.bufferDeviceAddress = VK_TRUE; // KEEP THIS: Mandatory for Ray Tracing
+    features12.timelineSemaphore = VK_TRUE;
 
-    // 2. Setup Base Vulkan 1.0 Features and chain to 1.2
+    // Acceleration Structure Features
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR asFeatures{};
+    asFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    asFeatures.accelerationStructure = VK_TRUE;
+
+    // Ray Tracing Pipeline Features
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeatures{};
+    rtPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rtPipelineFeatures.rayTracingPipeline = VK_TRUE;
+
+    // Chain them together: features2 -> features12 -> rtPipelineFeatures -> asFeatures
+    rtPipelineFeatures.pNext = &asFeatures;
+    features12.pNext = &rtPipelineFeatures;
+    
+    // Setup Base Vulkan 1.0 Features and chain to 1.2
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
@@ -357,9 +371,19 @@ void VulkanRenderer::createLogicalDevice() {
     createInfo.enabledExtensionCount = static_cast<uint32_t>(activeExtensions.size());
     createInfo.ppEnabledExtensionNames = activeExtensions.data();
 
-    // Fix the "enabledLayerCount is 1 (not zero)" error
-    createInfo.enabledLayerCount = 0; 
 
+    createInfo.enabledLayerCount = 0; 
+    
+    pfnCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(device, "vkCreateAccelerationStructureKHR");
+    pfnDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(device, "vkDestroyAccelerationStructureKHR");
+    pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(device, "vkGetAccelerationStructureBuildSizesKHR");
+    pfnCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(device, "vkCmdBuildAccelerationStructuresKHR");
+    pfnGetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(device, "vkGetAccelerationStructureDeviceAddressKHR");
+
+    pfnCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR");
+    pfnGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesKHR");
+    pfnCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(device, "vkCmdTraceRaysKHR");
+    
     if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
         throw std::runtime_error("failed to create logical device!");
     }

@@ -285,6 +285,8 @@ public:
     VkBuffer& instanceBuffer, 
     VkDeviceMemory& instanceMemory) const;
     
+    uint32_t GetCurrentFrame() const { return currentFrame; }
+    
     // Ray Tracing
     // Ray Tracing Function Pointers
     PFN_vkCreateAccelerationStructureKHR pfnCreateAccelerationStructureKHR = nullptr;
@@ -292,6 +294,18 @@ public:
     PFN_vkGetAccelerationStructureBuildSizesKHR pfnGetAccelerationStructureBuildSizesKHR = nullptr;
     PFN_vkCmdBuildAccelerationStructuresKHR pfnCmdBuildAccelerationStructuresKHR = nullptr;
     PFN_vkGetAccelerationStructureDeviceAddressKHR pfnGetAccelerationStructureDeviceAddressKHR = nullptr;
+    
+    PFN_vkCreateRayTracingPipelinesKHR pfnCreateRayTracingPipelinesKHR = nullptr;
+    PFN_vkGetRayTracingShaderGroupHandlesKHR pfnGetRayTracingShaderGroupHandlesKHR = nullptr;
+    PFN_vkCmdTraceRaysKHR pfnCmdTraceRaysKHR = nullptr;
+    
+    const std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME // Required by acceleration structure
+    };
+    // ------ END OF RAY TRACING -----//
     
 
 private: /// Private member variables
