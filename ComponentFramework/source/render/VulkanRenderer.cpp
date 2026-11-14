@@ -1156,7 +1156,7 @@ void VulkanRenderer::BuildTLAS(
 {
     if (instances.empty()) return;
 
-    // --- FIX: Wait for GPU to finish rendering previous frames before destroying old TLAS ---
+    // --- Wait for GPU to finish rendering previous frames before destroying old TLAS ---
     if (outTLAS != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(device);
         pfnDestroyAccelerationStructureKHR(device, outTLAS, nullptr);
